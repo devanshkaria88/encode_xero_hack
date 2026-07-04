@@ -21,3 +21,7 @@ web/next-env.d.ts
 # local runtime artifacts
 seed/.artifacts/
 *.tsbuildinfo
+
+# python skill caches
+__pycache__/
+*.pyc

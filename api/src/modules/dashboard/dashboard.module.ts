@@ -8,16 +8,18 @@ import {
   Task,
   AuditEvent,
 } from '../../entities';
+import { DashboardController } from './dashboard.controller';
+import { DashboardService } from './dashboard.service';
 
 // Aggregate read surfaces: the calendar-view feed (events colour-coded by
-// state), the leak strip (recoverable £ this month), and the audit trail.
-// The dashboard agent implements the controller/service.
+// state), the leak strip (recoverable £ this month), the audit trail and the
+// headline summary. Read-only — every mutation lives in its owning module.
 @Module({
   imports: [
     TypeOrmModule.forFeature([Meeting, Client, InvoiceProposal, Detection, Task, AuditEvent]),
   ],
-  providers: [],
-  controllers: [],
+  providers: [DashboardService],
+  controllers: [DashboardController],
   exports: [TypeOrmModule],
 })
 export class DashboardModule {}

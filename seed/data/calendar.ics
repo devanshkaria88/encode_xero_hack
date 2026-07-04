@@ -1,0 +1,83 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Robyn//Seed Demo Calendar//EN
+CALSCALE:GREGORIAN
+METHOD:PUBLISH
+X-WR-CALNAME:Devansh (Robyn demo)
+BEGIN:VEVENT
+UID:robyn-fenwick-workshop-0608@robyn.dev
+DTSTAMP:20260601T080000Z
+DTSTART:20260608T100000Z
+DTEND:20260608T120000Z
+SUMMARY:Fenwick Interiors - design workshop
+DESCRIPTION:Kitchen layout design workshop with Claire.
+LOCATION:Fenwick Interiors studio, Shoreditch
+ORGANIZER;CN=Devansh Karia:mailto:me@robyn.dev
+ATTENDEE;CN=Devansh Karia;PARTSTAT=ACCEPTED;ROLE=CHAIR:mailto:me@robyn.dev
+ATTENDEE;CN=Claire Fenwick;PARTSTAT=ACCEPTED:mailto:claire@fenwickinteriors.co.uk
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:robyn-halcyon-sync-0605@robyn.dev
+DTSTAMP:20260601T080000Z
+DTSTART:20260605T150000Z
+DTEND:20260605T153000Z
+SUMMARY:Halcyon Retail - monthly retainer sync
+DESCRIPTION:Standing monthly retainer check-in.
+ORGANIZER;CN=Devansh Karia:mailto:me@robyn.dev
+ATTENDEE;CN=Devansh Karia;PARTSTAT=ACCEPTED;ROLE=CHAIR:mailto:me@robyn.dev
+ATTENDEE;CN=Sarah Okoye;PARTSTAT=ACCEPTED:mailto:ops@halcyonretail.co.uk
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:robyn-marsh-advisory-0611@robyn.dev
+DTSTAMP:20260601T080000Z
+DTSTART:20260611T093000Z
+DTEND:20260611T173000Z
+SUMMARY:Marsh & Co - advisory day
+DESCRIPTION:Full-day strategy advisory on site.
+LOCATION:Marsh & Co, Farringdon
+ORGANIZER;CN=Devansh Karia:mailto:me@robyn.dev
+ATTENDEE;CN=Devansh Karia;PARTSTAT=ACCEPTED;ROLE=CHAIR:mailto:me@robyn.dev
+ATTENDEE;CN=David Marsh;PARTSTAT=ACCEPTED:mailto:finance@marshandco.co.uk
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:robyn-fenwick-kitchen-0616@robyn.dev
+DTSTAMP:20260601T080000Z
+DTSTART:20260616T140000Z
+DTEND:20260616T153000Z
+SUMMARY:Fenwick Interiors - kitchen fit-out review
+DESCRIPTION:Review of the kitchen fit-out progress and next steps.
+LOCATION:Fenwick Interiors studio, Shoreditch
+ORGANIZER;CN=Devansh Karia:mailto:me@robyn.dev
+ATTENDEE;CN=Devansh Karia;PARTSTAT=ACCEPTED;ROLE=CHAIR:mailto:me@robyn.dev
+ATTENDEE;CN=Claire Fenwick;PARTSTAT=ACCEPTED:mailto:claire@fenwickinteriors.co.uk
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:robyn-priya-discovery-0624@robyn.dev
+DTSTAMP:20260601T080000Z
+DTSTART:20260624T110000Z
+DTEND:20260624T114500Z
+SUMMARY:Discovery call - Priya Nair
+DESCRIPTION:Intro call about a possible brand and web project.
+ORGANIZER;CN=Devansh Karia:mailto:me@robyn.dev
+ATTENDEE;CN=Devansh Karia;PARTSTAT=ACCEPTED;ROLE=CHAIR:mailto:me@robyn.dev
+ATTENDEE;CN=Priya Nair;PARTSTAT=ACCEPTED:mailto:priya.nair88@gmail.com
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:robyn-fenwick-snagging-0627@robyn.dev
+DTSTAMP:20260601T080000Z
+DTSTART:20260627T130000Z
+DTEND:20260627T140000Z
+SUMMARY:Fenwick Interiors - snagging site visit
+DESCRIPTION:Walk the snag list on site plus lighting spec review.
+LOCATION:Fenwick Interiors project site, Hackney
+ORGANIZER;CN=Devansh Karia:mailto:me@robyn.dev
+ATTENDEE;CN=Devansh Karia;PARTSTAT=ACCEPTED;ROLE=CHAIR:mailto:me@robyn.dev
+ATTENDEE;CN=Claire Fenwick;PARTSTAT=ACCEPTED:mailto:claire@fenwickinteriors.co.uk
+STATUS:CONFIRMED
+END:VEVENT
+END:VCALENDAR

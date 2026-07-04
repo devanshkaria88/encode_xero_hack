@@ -1,6 +1,1219 @@
 {
   "openapi": "3.0.0",
-  "paths": {},
+  "paths": {
+    "/clients": {
+      "get": {
+        "description": "Every client with billing profile, autonomy state, contract summary, unbilled exposure and invoice-history count.",
+        "operationId": "ClientsController_list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ClientListItemDto"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "List clients",
+        "tags": [
+          "clients"
+        ]
+      }
+    },
+    "/clients/{id}": {
+      "get": {
+        "description": "Full client detail: parsed contract with clauses, invoice history and unbilled exposure.",
+        "operationId": "ClientsController_get",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientDetailDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Client detail",
+        "tags": [
+          "clients"
+        ]
+      }
+    },
+    "/clients/{id}/autonomy": {
+      "patch": {
+        "description": "Flip the per-client auto-send policy. ON lets Robyn send invoices without asking, within contract terms.",
+        "operationId": "ClientsController_setAutonomy",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateAutonomyDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientListItemDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Toggle autonomy",
+        "tags": [
+          "clients"
+        ]
+      }
+    },
+    "/clients/{id}/contract": {
+      "post": {
+        "description": "Parse pasted contract text into rate, terms and cited clauses, file it against the client, set the billing profile, and resolve any ATTACH_CONTRACT task.",
+        "operationId": "ClientsController_attachContract",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpsertContractDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContractDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Attach / re-parse a contract",
+        "tags": [
+          "clients"
+        ]
+      },
+      "get": {
+        "description": "The contract on file with its parsed clauses for the clause viewer. Null if none is filed.",
+        "operationId": "ClientsController_getContract",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContractDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Get parsed contract",
+        "tags": [
+          "clients"
+        ]
+      }
+    },
+    "/potential-clients": {
+      "get": {
+        "description": "The pipeline rail: prospects seen on the calendar but not yet in Xero, with watch state and the agreement-evidence quote once found.",
+        "operationId": "PotentialClientsController_list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PotentialClientDto"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "Potential-client queue",
+        "tags": [
+          "clients"
+        ]
+      }
+    },
+    "/potential-clients/{id}/confirm": {
+      "post": {
+        "description": "Loop-2 finish: create the Xero contact, create a real Client, raise ATTACH_CONTRACT and resolve the CONFIRM_AGREEMENT task. Xero failures are non-fatal — the prospect is still promoted locally.",
+        "operationId": "PotentialClientsController_confirm",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PromoteResultDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Confirm & promote a prospect",
+        "tags": [
+          "clients"
+        ]
+      }
+    },
+    "/potential-clients/{id}/dismiss": {
+      "post": {
+        "description": "Remove a prospect from the pipeline and resolve its CONFIRM_AGREEMENT task.",
+        "operationId": "PotentialClientsController_dismiss",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DismissPotentialClientDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PotentialClientDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Dismiss a prospect",
+        "tags": [
+          "clients"
+        ]
+      }
+    },
+    "/meetings": {
+      "get": {
+        "description": "All meetings with state, client, duration, attendees, transcript flag and linked proposal id.",
+        "operationId": "MeetingsController_list",
+        "parameters": [
+          {
+            "name": "state",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "enum": [
+                "DETECTED",
+                "AWAITING_TRANSCRIPT",
+                "TRANSCRIPT_ATTACHED",
+                "CLIENT_MATCHED",
+                "UNKNOWN_ATTENDEE",
+                "INVOICE_PROPOSED",
+                "SENT",
+                "SKIPPED"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/MeetingListItemDto"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "List meetings",
+        "tags": [
+          "meetings"
+        ]
+      }
+    },
+    "/meetings/{id}": {
+      "get": {
+        "description": "Full meeting with parsed transcript, match proposals, linked proposal and the evidence/decision chain.",
+        "operationId": "MeetingsController_detail",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "Meeting id",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeetingDetailDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Meeting detail",
+        "tags": [
+          "meetings"
+        ]
+      }
+    },
+    "/meetings/sync": {
+      "post": {
+        "description": "Ingests the calendar (Google read-only if configured, else the seeded .ics fallback), upserts meetings and runs the Loop-1 step on every un-progressed meeting. Updates the CALENDAR connection state.",
+        "operationId": "MeetingsController_sync",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SyncResultDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Sync the calendar (check now)",
+        "tags": [
+          "meetings"
+        ]
+      }
+    },
+    "/meetings/import-ics": {
+      "post": {
+        "description": "Fallback ingest path: parse raw .ics text, upsert meetings and run the Loop-1 step.",
+        "operationId": "MeetingsController_importIcs",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImportIcsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SyncResultDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Import an .ics calendar",
+        "tags": [
+          "meetings"
+        ]
+      }
+    },
+    "/meetings/{id}/transcript": {
+      "post": {
+        "description": "Saves and parses the transcript, resolves the PROVIDE_TRANSCRIPT task, then runs the Loop-1 continuation (match, price, policy, auto-send or raise REVIEW_INVOICE).",
+        "operationId": "MeetingsController_attachTranscript",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "Meeting id",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AttachTranscriptDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeetingActionResultDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Attach a transcript",
+        "tags": [
+          "meetings"
+        ]
+      }
+    },
+    "/meetings/{id}/confirm-client": {
+      "post": {
+        "description": "Sets the client, resolves the CONFIRM_CLIENT_MATCH task and re-runs the proposal-building continuation.",
+        "operationId": "MeetingsController_confirmClient",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "Meeting id",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfirmClientDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeetingActionResultDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Confirm the client for a meeting",
+        "tags": [
+          "meetings"
+        ]
+      }
+    },
+    "/meetings/{id}/skip": {
+      "post": {
+        "description": "Marks the meeting SKIPPED (not billable) and resolves any open transcript/match task.",
+        "operationId": "MeetingsController_skip",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "Meeting id",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SkipMeetingDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeetingDetailDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Skip a meeting",
+        "tags": [
+          "meetings"
+        ]
+      }
+    },
+    "/email/poll": {
+      "post": {
+        "description": "Reads NEW messages FROM queued/watching potential-client addresses ONLY (IMAP when configured, else the seeded fixture mailbox), classifies each for agreement, and on agreement flips the PotentialClient to AGREEMENT_DETECTED and raises a CONFIRM_AGREEMENT task. Never reads a non-queued sender; never promotes a client (that is ClientsModule).",
+        "operationId": "EmailController_poll",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmailPollResultDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Poll the mailbox for client agreements (check now)",
+        "tags": [
+          "connections"
+        ]
+      }
+    },
+    "/proposals": {
+      "get": {
+        "description": "All proposals with client name, source (meeting/detection), totals, state, policy verdict and Xero link. Filter with ?state=.",
+        "operationId": "ProposalsController_list",
+        "parameters": [
+          {
+            "name": "state",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "enum": [
+                "DRAFT",
+                "IN_REVIEW",
+                "APPROVED",
+                "SENT",
+                "REJECTED"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ProposalSummaryDto"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "List invoice proposals",
+        "tags": [
+          "proposals"
+        ]
+      }
+    },
+    "/proposals/{id}": {
+      "get": {
+        "description": "Full lines with provenance chips, policy reasons, the source evidence chain (meeting/transcript/detection/contract) and live Xero status.",
+        "operationId": "ProposalsController_detail",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProposalDetailDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Get a proposal in full",
+        "tags": [
+          "proposals"
+        ]
+      }
+    },
+    "/proposals/{id}/approve": {
+      "post": {
+        "description": "Writes an AUTHORISED ACCREC invoice (contact + invoice + decision note + evidence), sets state SENT, resolves the REVIEW_INVOICE task and marks the source meeting SENT. On Xero failure the proposal stays IN_REVIEW and the error is returned in the body (never a 500).",
+        "operationId": "ProposalsController_approve",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProposalActionResultDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Approve and send the proposal to Xero",
+        "tags": [
+          "proposals"
+        ]
+      }
+    },
+    "/proposals/{id}/save-draft": {
+      "post": {
+        "description": "Writes a DRAFT (unauthorised) ACCREC invoice to Xero and records its id + deep link, but keeps the proposal IN_REVIEW awaiting approval. On Xero failure the error is returned in the body (never a 500).",
+        "operationId": "ProposalsController_saveDraft",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProposalActionResultDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Create a DRAFT invoice in Xero",
+        "tags": [
+          "proposals"
+        ]
+      }
+    },
+    "/proposals/{id}/reject": {
+      "post": {
+        "description": "Sets state REJECTED, resolves the REVIEW_INVOICE task and records the reason on the audit trail.",
+        "operationId": "ProposalsController_reject",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RejectProposalDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProposalActionResultDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Reject the proposal",
+        "tags": [
+          "proposals"
+        ]
+      }
+    },
+    "/proposals/{id}/lines": {
+      "patch": {
+        "description": "Replaces the line set before approval and recomputes line amounts + subtotal, tax and total.",
+        "operationId": "ProposalsController_patchLines",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PatchLinesDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProposalActionResultDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Edit the proposal lines",
+        "tags": [
+          "proposals"
+        ]
+      }
+    },
+    "/detections/run": {
+      "post": {
+        "description": "Runs three idempotent detectors — QUOTE_NOT_INVOICED, RETAINER_STOPPED and EXPENSE_NOT_RECHARGED. Reads Xero when it is live and falls back to local seed data otherwise (evidence.source records which path was used). New detections are deduped by a stable key, so re-running is safe. Returns the created rows plus counts.",
+        "operationId": "DetectionsController_run",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunDetectorsResultDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Run the ledger detectors (check now)",
+        "tags": [
+          "detections"
+        ]
+      }
+    },
+    "/detections": {
+      "get": {
+        "description": "All detections with type, matched client, recoverable value, evidence and state. Filter with ?state= and/or ?type=.",
+        "operationId": "DetectionsController_list",
+        "parameters": [
+          {
+            "name": "state",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "enum": [
+                "OPEN",
+                "PROPOSED",
+                "RESOLVED",
+                "DISMISSED"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "name": "type",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "enum": [
+                "QUOTE_NOT_INVOICED",
+                "RETAINER_STOPPED",
+                "EXPENSE_NOT_RECHARGED"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/DetectionDto"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "List ledger detections",
+        "tags": [
+          "detections"
+        ]
+      }
+    },
+    "/detections/{id}/propose": {
+      "post": {
+        "description": "Builds a single-line InvoiceProposal (provenance LEDGER) from the detection, sets it IN_REVIEW with 20% UK VAT, flips the detection to PROPOSED and raises a REVIEW_INVOICE task. Nothing is written to Xero here — approval lives in ProposalsModule. Idempotent: re-proposing returns the existing proposal.",
+        "operationId": "DetectionsController_propose",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DetectionProposeResultDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Turn a detection into an invoice proposal",
+        "tags": [
+          "detections"
+        ]
+      }
+    },
+    "/detections/{id}/dismiss": {
+      "post": {
+        "description": "Sets the detection DISMISSED and records the reason (optional) on the audit trail.",
+        "operationId": "DetectionsController_dismiss",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DismissDetectionDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DetectionActionResultDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Dismiss a detection",
+        "tags": [
+          "detections"
+        ]
+      }
+    },
+    "/tasks": {
+      "get": {
+        "operationId": "TasksController_listOpen",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/TaskDto"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "List OPEN tasks (the inbox), newest first, each enriched with card context.",
+        "tags": [
+          "tasks"
+        ]
+      }
+    },
+    "/tasks/all": {
+      "get": {
+        "operationId": "TasksController_listAll",
+        "parameters": [
+          {
+            "name": "state",
+            "required": false,
+            "in": "query",
+            "description": "Filter by task state. Omit for all states.",
+            "schema": {
+              "enum": [
+                "OPEN",
+                "RESOLVED"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/TaskDto"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "List all tasks (OPEN and RESOLVED); optional ?state= filter.",
+        "tags": [
+          "tasks"
+        ]
+      }
+    },
+    "/tasks/counts": {
+      "get": {
+        "operationId": "TasksController_counts",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskCountsDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "OPEN task counts by type, for the inbox badges.",
+        "tags": [
+          "tasks"
+        ]
+      }
+    },
+    "/connections": {
+      "get": {
+        "description": "Three rows — XERO (probed live from Xero health), CALENDAR and EMAIL (read from their ConnectionState rows, DOWN if never run). Read-only: does not trigger any sync/poll job.",
+        "operationId": "ConnectionsController_list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ConnectionRowDto"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "List integration health",
+        "tags": [
+          "connections"
+        ]
+      }
+    },
+    "/connections/xero/recheck": {
+      "post": {
+        "description": "Forces a fresh Xero health check, upserts the XERO ConnectionState row, records an audit event, and returns the refreshed row. The \"check now\" for Xero. Never throws when Xero is down — returns a DOWN row with the reason.",
+        "operationId": "ConnectionsController_recheckXero",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectionRowDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Re-probe Xero health",
+        "tags": [
+          "connections"
+        ]
+      }
+    },
+    "/dashboard/calendar": {
+      "get": {
+        "description": "Colour-coded events for the calendar view. colorKey is derived from meeting state: billed=teal, proposal=amber, awaiting=amber-outline, unknown=purple, skipped/personal=gray. Optionally window by event start with from/to.",
+        "operationId": "DashboardController_calendar",
+        "parameters": [
+          {
+            "name": "from",
+            "required": false,
+            "in": "query",
+            "description": "Inclusive lower bound (ISO date/datetime) on the event start. Omit for no lower bound.",
+            "schema": {
+              "example": "2026-06-01T00:00:00.000Z",
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "required": false,
+            "in": "query",
+            "description": "Inclusive upper bound (ISO date/datetime) on the event start. Omit for no upper bound.",
+            "schema": {
+              "example": "2026-06-30T23:59:59.000Z",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CalendarEventDto"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "Calendar-view feed",
+        "tags": [
+          "dashboard"
+        ]
+      }
+    },
+    "/dashboard/leak-strip": {
+      "get": {
+        "description": "The \"£X was walking away\" strip: recoverable total plus a per-source breakdown across OPEN detections, IN_REVIEW proposals and unbilled meetings.",
+        "operationId": "DashboardController_leakStrip",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LeakStripDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Recoverable-money strip",
+        "tags": [
+          "dashboard"
+        ]
+      }
+    },
+    "/dashboard/audit": {
+      "get": {
+        "description": "The audit trail screen: every state change, Xero write, policy decision and poll, newest first.",
+        "operationId": "DashboardController_audit",
+        "parameters": [
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "description": "Maximum number of audit events to return, newest first.",
+            "schema": {
+              "minimum": 1,
+              "maximum": 500,
+              "default": 100,
+              "example": 100,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AuditEventDto"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "Audit trail feed",
+        "tags": [
+          "dashboard"
+        ]
+      }
+    },
+    "/dashboard/summary": {
+      "get": {
+        "description": "Open tasks, total unbilled £ across clients, invoices sent this month, and client count.",
+        "operationId": "DashboardController_summary",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardSummaryDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Headline stats",
+        "tags": [
+          "dashboard"
+        ]
+      }
+    }
+  },
   "info": {
     "title": "Robyn API",
     "description": "Robyn turns a freelancer's calendar, contracts and transcripts into invoices in Xero. Every agent behaviour is a state transition that writes to Xero or raises a Task. The LLM parses and proposes at the edges; it never decides and never sends.",
@@ -43,6 +1256,2476 @@
   ],
   "servers": [],
   "components": {
-    "schemas": {}
+    "schemas": {
+      "BillingProfileDto": {
+        "type": "object",
+        "properties": {
+          "rate": {
+            "type": "number",
+            "nullable": true,
+            "example": 150,
+            "description": "Rate in the contract currency."
+          },
+          "rateUnit": {
+            "type": "string",
+            "nullable": true,
+            "enum": [
+              "HOUR",
+              "DAY",
+              "FIXED"
+            ],
+            "example": "HOUR",
+            "description": "Whether the rate is hourly, per-day or a fixed fee."
+          },
+          "currency": {
+            "type": "string",
+            "example": "GBP",
+            "description": "ISO 4217 currency code."
+          },
+          "cadence": {
+            "type": "string",
+            "nullable": true,
+            "example": "monthly retainer",
+            "description": "Billing cadence, if known."
+          },
+          "terms": {
+            "type": "string",
+            "nullable": true,
+            "example": "Net 14",
+            "description": "Payment terms."
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "CONTRACT",
+              "INFERRED"
+            ],
+            "example": "CONTRACT",
+            "description": "CONTRACT (parsed from a signed document) or INFERRED (from history)."
+          },
+          "provenance": {
+            "type": "string",
+            "example": "Clause 3.1",
+            "description": "Human-readable citation for where these terms came from."
+          }
+        },
+        "required": [
+          "rate",
+          "rateUnit",
+          "currency",
+          "cadence",
+          "terms",
+          "source",
+          "provenance"
+        ]
+      },
+      "ContractSummaryDto": {
+        "type": "object",
+        "properties": {
+          "hasContract": {
+            "type": "boolean",
+            "example": true,
+            "description": "Whether a parsed contract is on file for this client."
+          },
+          "title": {
+            "type": "string",
+            "nullable": true,
+            "example": "Consulting Agreement 2026"
+          },
+          "rate": {
+            "type": "number",
+            "nullable": true,
+            "example": 150
+          },
+          "rateUnit": {
+            "type": "string",
+            "nullable": true,
+            "enum": [
+              "HOUR",
+              "DAY",
+              "FIXED"
+            ],
+            "example": "HOUR"
+          },
+          "currency": {
+            "type": "string",
+            "nullable": true,
+            "example": "GBP"
+          },
+          "terms": {
+            "type": "string",
+            "nullable": true,
+            "example": "Net 14"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "CONTRACT",
+              "INFERRED"
+            ],
+            "nullable": true,
+            "example": "CONTRACT"
+          }
+        },
+        "required": [
+          "hasContract",
+          "title",
+          "rate",
+          "rateUnit",
+          "currency",
+          "terms",
+          "source"
+        ]
+      },
+      "ClientListItemDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string",
+            "example": "Fenwick Interiors"
+          },
+          "emails": {
+            "example": [
+              "ops@fenwick.co.uk"
+            ],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "xeroContactId": {
+            "type": "string",
+            "nullable": true,
+            "description": "Xero ContactID once created; null until then."
+          },
+          "autonomyEnabled": {
+            "type": "boolean",
+            "example": false,
+            "description": "Per-client auto-send policy."
+          },
+          "billingProfile": {
+            "nullable": true,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/BillingProfileDto"
+              }
+            ]
+          },
+          "contract": {
+            "$ref": "#/components/schemas/ContractSummaryDto"
+          },
+          "unbilledExposureGbp": {
+            "type": "number",
+            "example": 1200,
+            "description": "Sum of DRAFT/IN_REVIEW proposal totals — money not yet invoiced."
+          },
+          "invoiceHistoryCount": {
+            "type": "number",
+            "example": 6,
+            "description": "Number of invoices sent for this client."
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "emails",
+          "xeroContactId",
+          "autonomyEnabled",
+          "billingProfile",
+          "contract",
+          "unbilledExposureGbp",
+          "invoiceHistoryCount"
+        ]
+      },
+      "ClauseDto": {
+        "type": "object",
+        "properties": {
+          "ref": {
+            "type": "string",
+            "example": "Clause 3.1",
+            "description": "The clause reference."
+          },
+          "text": {
+            "type": "string",
+            "example": "The Consultant shall be paid at a rate of GBP 150 per hour."
+          }
+        },
+        "required": [
+          "ref",
+          "text"
+        ]
+      },
+      "ContractDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "clientId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "title": {
+            "type": "string",
+            "nullable": true,
+            "example": "Consulting Agreement 2026"
+          },
+          "fileRef": {
+            "type": "string",
+            "example": "pasted-contract",
+            "description": "Source file reference for the contract."
+          },
+          "rawText": {
+            "type": "string",
+            "nullable": true,
+            "description": "The raw contract text so the viewer can highlight in place."
+          },
+          "rate": {
+            "type": "number",
+            "nullable": true,
+            "example": 150
+          },
+          "rateUnit": {
+            "type": "string",
+            "nullable": true,
+            "enum": [
+              "HOUR",
+              "DAY",
+              "FIXED"
+            ],
+            "example": "HOUR"
+          },
+          "currency": {
+            "type": "string",
+            "example": "GBP"
+          },
+          "paymentTerms": {
+            "type": "string",
+            "nullable": true,
+            "example": "Net 14"
+          },
+          "scopeSummary": {
+            "type": "string",
+            "nullable": true,
+            "example": "Ongoing UX consulting on a time basis."
+          },
+          "clauses": {
+            "description": "Every parsed clause, each keeping its citation.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ClauseDto"
+            }
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "clientId",
+          "title",
+          "fileRef",
+          "rawText",
+          "rate",
+          "rateUnit",
+          "currency",
+          "paymentTerms",
+          "scopeSummary",
+          "clauses",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "InvoiceHistoryItemDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "DRAFT",
+              "IN_REVIEW",
+              "APPROVED",
+              "SENT",
+              "REJECTED"
+            ],
+            "example": "SENT"
+          },
+          "total": {
+            "type": "number",
+            "example": 900,
+            "description": "Invoice total (incl. tax)."
+          },
+          "currency": {
+            "type": "string",
+            "example": "GBP"
+          },
+          "reference": {
+            "type": "string",
+            "nullable": true,
+            "example": "ROBYN-8f21ac3d",
+            "description": "Idempotency reference used in Xero."
+          },
+          "xeroInvoiceNumber": {
+            "type": "string",
+            "nullable": true,
+            "example": "INV-0042"
+          },
+          "xeroDeepLink": {
+            "type": "string",
+            "nullable": true,
+            "description": "Deep-link into the Xero invoice, once written."
+          },
+          "autoSent": {
+            "type": "boolean",
+            "example": false,
+            "description": "Whether Robyn sent this automatically (autonomy ON)."
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "state",
+          "total",
+          "currency",
+          "reference",
+          "xeroInvoiceNumber",
+          "xeroDeepLink",
+          "autoSent",
+          "createdAt"
+        ]
+      },
+      "ClientDetailDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string",
+            "example": "Fenwick Interiors"
+          },
+          "emails": {
+            "example": [
+              "ops@fenwick.co.uk"
+            ],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "xeroContactId": {
+            "type": "string",
+            "nullable": true
+          },
+          "autonomyEnabled": {
+            "type": "boolean",
+            "example": false
+          },
+          "billingProfile": {
+            "nullable": true,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/BillingProfileDto"
+              }
+            ]
+          },
+          "contract": {
+            "nullable": true,
+            "description": "The parsed contract on file, if any.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ContractDto"
+              }
+            ]
+          },
+          "invoiceHistory": {
+            "description": "Invoices sent for this client, newest first.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InvoiceHistoryItemDto"
+            }
+          },
+          "unbilledExposureGbp": {
+            "type": "number",
+            "example": 1200
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "emails",
+          "xeroContactId",
+          "autonomyEnabled",
+          "billingProfile",
+          "contract",
+          "invoiceHistory",
+          "unbilledExposureGbp",
+          "createdAt"
+        ]
+      },
+      "UpdateAutonomyDto": {
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "description": "When true, Robyn may auto-send invoices for this client within contract terms. Default policy is OFF.",
+            "example": true
+          }
+        },
+        "required": [
+          "enabled"
+        ]
+      },
+      "UpsertContractDto": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "description": "Human title for the contract (used as the file reference and card heading).",
+            "example": "Fenwick Interiors — Consulting Agreement 2026"
+          },
+          "rawText": {
+            "type": "string",
+            "description": "The full contract text. Robyn parses the rate, terms and clauses from this, citing each value back to its clause.",
+            "example": "Clause 3.1 The Consultant shall be paid at a rate of GBP 150 per hour. Clause 5 Payment terms are Net 14."
+          }
+        },
+        "required": [
+          "rawText"
+        ]
+      },
+      "PotentialClientDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "displayName": {
+            "type": "string",
+            "example": "Priya Nair"
+          },
+          "emails": {
+            "example": [
+              "priya.nair@gmail.com"
+            ],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "QUEUED",
+              "WATCHING",
+              "AGREEMENT_DETECTED",
+              "PROMOTED",
+              "DISMISSED"
+            ],
+            "example": "QUEUED"
+          },
+          "firstSeenMeetingId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true,
+            "description": "The meeting this prospect was first seen on."
+          },
+          "evidenceQuote": {
+            "type": "string",
+            "nullable": true,
+            "example": "let's go ahead",
+            "description": "Verbatim agreement quote, once an agreement email is detected."
+          },
+          "evidenceFrom": {
+            "type": "string",
+            "nullable": true,
+            "example": "priya.nair@gmail.com",
+            "description": "Sender of the agreement email, if detected."
+          },
+          "promotedClientId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true,
+            "description": "Set to the new Client id once promoted."
+          },
+          "lastPolledAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "description": "Last time Robyn polled this prospect's inbox."
+          }
+        },
+        "required": [
+          "id",
+          "displayName",
+          "emails",
+          "state",
+          "firstSeenMeetingId",
+          "evidenceQuote",
+          "evidenceFrom",
+          "promotedClientId",
+          "lastPolledAt"
+        ]
+      },
+      "PromoteResultDto": {
+        "type": "object",
+        "properties": {
+          "clientId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The id of the newly created Client."
+          },
+          "clientName": {
+            "type": "string",
+            "example": "Priya Nair"
+          },
+          "xeroContactId": {
+            "type": "string",
+            "nullable": true,
+            "description": "Xero ContactID if the write succeeded; null if Xero was unavailable."
+          },
+          "xeroContactCreated": {
+            "type": "boolean",
+            "example": true,
+            "description": "True when a new Xero contact was created (false if reused or Xero down)."
+          },
+          "xeroError": {
+            "type": "string",
+            "nullable": true,
+            "description": "Non-fatal Xero error message when the contact could not be created live. Local promotion still completed."
+          },
+          "attachContractTaskId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true,
+            "description": "The ATTACH_CONTRACT task raised for the new client."
+          },
+          "potentialClient": {
+            "description": "The prospect, now in PROMOTED state.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PotentialClientDto"
+              }
+            ]
+          }
+        },
+        "required": [
+          "clientId",
+          "clientName",
+          "xeroContactId",
+          "xeroContactCreated",
+          "xeroError",
+          "attachContractTaskId",
+          "potentialClient"
+        ]
+      },
+      "DismissPotentialClientDto": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string",
+            "description": "Optional reason recorded on the audit trail for dismissing this prospect.",
+            "example": "Not a real lead — internal calendar invite."
+          }
+        }
+      },
+      "MeetingState": {
+        "type": "string",
+        "enum": [
+          "DETECTED",
+          "AWAITING_TRANSCRIPT",
+          "TRANSCRIPT_ATTACHED",
+          "CLIENT_MATCHED",
+          "UNKNOWN_ATTENDEE",
+          "INVOICE_PROPOSED",
+          "SENT",
+          "SKIPPED"
+        ]
+      },
+      "AttendeeDto": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "example": "jane@fenwick.co.uk"
+          },
+          "name": {
+            "type": "string",
+            "example": "Jane Fenwick"
+          },
+          "organizer": {
+            "type": "boolean",
+            "example": false
+          }
+        },
+        "required": [
+          "email"
+        ]
+      },
+      "MeetingListItemDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "gcalEventId": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "start": {
+            "type": "string",
+            "description": "ISO timestamp."
+          },
+          "end": {
+            "type": "string",
+            "description": "ISO timestamp."
+          },
+          "durationHours": {
+            "type": "number",
+            "example": 1.5
+          },
+          "state": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/MeetingState"
+              }
+            ]
+          },
+          "clientId": {
+            "type": "object",
+            "nullable": true
+          },
+          "clientName": {
+            "type": "object",
+            "nullable": true
+          },
+          "attendees": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AttendeeDto"
+            }
+          },
+          "isPersonal": {
+            "type": "boolean",
+            "description": "No external attendees — auto-skipped."
+          },
+          "hasTranscript": {
+            "type": "boolean"
+          },
+          "proposalId": {
+            "type": "object",
+            "nullable": true,
+            "description": "Linked InvoiceProposal id, if any."
+          },
+          "source": {
+            "type": "string",
+            "example": "ics",
+            "description": "'google' | 'ics'"
+          }
+        },
+        "required": [
+          "id",
+          "gcalEventId",
+          "title",
+          "start",
+          "end",
+          "durationHours",
+          "state",
+          "attendees",
+          "isPersonal",
+          "hasTranscript",
+          "source"
+        ]
+      },
+      "TranscriptSource": {
+        "type": "string",
+        "enum": [
+          "PASTED",
+          "GRANOLA",
+          "UPLOAD"
+        ]
+      },
+      "ScopeItemDto": {
+        "type": "object",
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "est_hours": {
+            "type": "number",
+            "example": 2
+          },
+          "evidence_quote": {
+            "type": "string",
+            "description": "Verbatim transcript line evidencing the work."
+          },
+          "billable": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "description",
+          "est_hours",
+          "evidence_quote",
+          "billable"
+        ]
+      },
+      "TranscriptParsedDto": {
+        "type": "object",
+        "properties": {
+          "summary": {
+            "type": "object",
+            "nullable": true
+          },
+          "action_points": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "scope_items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ScopeItemDto"
+            }
+          }
+        },
+        "required": [
+          "action_points",
+          "scope_items"
+        ]
+      },
+      "TranscriptDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "source": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/TranscriptSource"
+              }
+            ]
+          },
+          "rawText": {
+            "type": "string"
+          },
+          "parsed": {
+            "nullable": true,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/TranscriptParsedDto"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "source",
+          "rawText"
+        ]
+      },
+      "MatchProposalDto": {
+        "type": "object",
+        "properties": {
+          "client_id": {
+            "type": "string"
+          },
+          "client_name": {
+            "type": "string"
+          },
+          "confidence": {
+            "type": "number",
+            "example": 0.82,
+            "description": "0..1 confidence — a proposal, never a decision."
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "client_id",
+          "client_name",
+          "confidence",
+          "reason"
+        ]
+      },
+      "InvoiceProposalState": {
+        "type": "string",
+        "enum": [
+          "DRAFT",
+          "IN_REVIEW",
+          "APPROVED",
+          "SENT",
+          "REJECTED"
+        ]
+      },
+      "PolicyResultDto": {
+        "type": "object",
+        "properties": {
+          "auto": {
+            "type": "boolean",
+            "description": "Whether Robyn may send without asking."
+          },
+          "reasons": {
+            "description": "Every reason the gate passed/failed.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "auto",
+          "reasons"
+        ]
+      },
+      "ProvenanceKind": {
+        "type": "string",
+        "enum": [
+          "CONTRACT_CLAUSE",
+          "TRANSCRIPT_QUOTE",
+          "CALENDAR_BLOCK",
+          "LEDGER"
+        ]
+      },
+      "LineProvenanceDto": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ProvenanceKind"
+              }
+            ]
+          },
+          "label": {
+            "type": "string",
+            "example": "Clause 3.1"
+          },
+          "detail": {
+            "type": "string",
+            "example": "The Consultant shall be paid £150 per hour."
+          },
+          "source_ref": {
+            "type": "string",
+            "description": "Source id (meeting/contract/quote)."
+          }
+        },
+        "required": [
+          "kind",
+          "label",
+          "detail"
+        ]
+      },
+      "ProposalLineDto": {
+        "type": "object",
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "quantity": {
+            "type": "number",
+            "example": 1.5
+          },
+          "unit_amount": {
+            "type": "number",
+            "example": 150
+          },
+          "line_amount": {
+            "type": "number",
+            "example": 225
+          },
+          "account_code": {
+            "type": "string",
+            "example": "200"
+          },
+          "tax_type": {
+            "type": "string",
+            "example": "OUTPUT2"
+          },
+          "provenance": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LineProvenanceDto"
+            }
+          }
+        },
+        "required": [
+          "description",
+          "quantity",
+          "unit_amount",
+          "line_amount",
+          "provenance"
+        ]
+      },
+      "MeetingProposalDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "state": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/InvoiceProposalState"
+              }
+            ]
+          },
+          "reference": {
+            "type": "object",
+            "example": "ROBYN-1a2b3c4d"
+          },
+          "currency": {
+            "type": "string",
+            "example": "GBP"
+          },
+          "subtotal": {
+            "type": "number",
+            "example": 225
+          },
+          "taxTotal": {
+            "type": "number",
+            "example": 45
+          },
+          "total": {
+            "type": "number",
+            "example": 270
+          },
+          "autoSent": {
+            "type": "boolean",
+            "description": "True if Robyn auto-sent it (autonomy ON)."
+          },
+          "xeroInvoiceId": {
+            "type": "object",
+            "nullable": true
+          },
+          "xeroInvoiceNumber": {
+            "type": "object",
+            "nullable": true
+          },
+          "xeroDeepLink": {
+            "type": "object",
+            "nullable": true
+          },
+          "policyResult": {
+            "$ref": "#/components/schemas/PolicyResultDto"
+          },
+          "lines": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProposalLineDto"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "state",
+          "currency",
+          "subtotal",
+          "taxTotal",
+          "total",
+          "autoSent",
+          "policyResult",
+          "lines"
+        ]
+      },
+      "AuditActor": {
+        "type": "string",
+        "enum": [
+          "ROBYN",
+          "HUMAN",
+          "LLM",
+          "XERO",
+          "SYSTEM"
+        ]
+      },
+      "AuditEventDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Audit event id.",
+            "format": "uuid"
+          },
+          "actor": {
+            "type": "string",
+            "description": "Who acted.",
+            "enum": [
+              "ROBYN",
+              "HUMAN",
+              "LLM",
+              "XERO",
+              "SYSTEM"
+            ]
+          },
+          "action": {
+            "type": "string",
+            "description": "Machine verb, e.g. \"xero.invoice.created\".",
+            "example": "xero.invoice.created"
+          },
+          "summary": {
+            "type": "string",
+            "description": "Human sentence for the audit trail."
+          },
+          "subjectType": {
+            "type": "string",
+            "description": "Subject kind, e.g. \"meeting\" | \"proposal\" | \"client\".",
+            "nullable": true
+          },
+          "subjectId": {
+            "type": "string",
+            "description": "Subject id.",
+            "nullable": true,
+            "format": "uuid"
+          },
+          "inputs": {
+            "type": "object",
+            "description": "The decision inputs kept so an auditor can reconstruct it.",
+            "nullable": true,
+            "additionalProperties": true
+          },
+          "createdAt": {
+            "type": "string",
+            "description": "When it happened (ISO datetime)."
+          }
+        },
+        "required": [
+          "id",
+          "actor",
+          "action",
+          "summary",
+          "subjectType",
+          "subjectId",
+          "inputs",
+          "createdAt"
+        ]
+      },
+      "MeetingDetailDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "gcalEventId": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "start": {
+            "type": "string",
+            "description": "ISO timestamp."
+          },
+          "end": {
+            "type": "string",
+            "description": "ISO timestamp."
+          },
+          "durationHours": {
+            "type": "number",
+            "example": 1.5
+          },
+          "state": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/MeetingState"
+              }
+            ]
+          },
+          "clientId": {
+            "type": "object",
+            "nullable": true
+          },
+          "clientName": {
+            "type": "object",
+            "nullable": true
+          },
+          "attendees": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AttendeeDto"
+            }
+          },
+          "isPersonal": {
+            "type": "boolean",
+            "description": "No external attendees — auto-skipped."
+          },
+          "hasTranscript": {
+            "type": "boolean"
+          },
+          "proposalId": {
+            "type": "object",
+            "nullable": true,
+            "description": "Linked InvoiceProposal id, if any."
+          },
+          "source": {
+            "type": "string",
+            "example": "ics",
+            "description": "'google' | 'ics'"
+          },
+          "skipReason": {
+            "type": "object",
+            "nullable": true,
+            "description": "Reason the meeting was skipped."
+          },
+          "transcript": {
+            "nullable": true,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/TranscriptDto"
+              }
+            ]
+          },
+          "matchProposals": {
+            "nullable": true,
+            "description": "LLM fuzzy match proposals (only when unknown/ambiguous).",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MatchProposalDto"
+            }
+          },
+          "proposal": {
+            "nullable": true,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/MeetingProposalDto"
+              }
+            ]
+          },
+          "auditTrail": {
+            "description": "The evidence/decision chain, newest first.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AuditEventDto"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "gcalEventId",
+          "title",
+          "start",
+          "end",
+          "durationHours",
+          "state",
+          "attendees",
+          "isPersonal",
+          "hasTranscript",
+          "source",
+          "auditTrail"
+        ]
+      },
+      "ConnectionStatus": {
+        "type": "string",
+        "enum": [
+          "LIVE",
+          "FALLBACK",
+          "DOWN"
+        ]
+      },
+      "SyncResultDto": {
+        "type": "object",
+        "properties": {
+          "source": {
+            "type": "string",
+            "example": "ics",
+            "description": "'google' | 'ics'"
+          },
+          "status": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ConnectionStatus"
+              }
+            ]
+          },
+          "label": {
+            "type": "object",
+            "nullable": true
+          },
+          "detail": {
+            "type": "object",
+            "nullable": true
+          },
+          "imported": {
+            "type": "number",
+            "description": "New meetings created this run."
+          },
+          "updated": {
+            "type": "number",
+            "description": "Existing meetings refreshed this run."
+          },
+          "processed": {
+            "type": "number",
+            "description": "Meetings the Loop-1 step ran on this run."
+          },
+          "lastSyncAt": {
+            "type": "string",
+            "description": "ISO timestamp of this sync."
+          }
+        },
+        "required": [
+          "source",
+          "status",
+          "imported",
+          "updated",
+          "processed",
+          "lastSyncAt"
+        ]
+      },
+      "ImportIcsDto": {
+        "type": "object",
+        "properties": {
+          "icsText": {
+            "type": "string",
+            "description": "Raw .ics calendar text to ingest."
+          }
+        },
+        "required": [
+          "icsText"
+        ]
+      },
+      "AttachTranscriptDto": {
+        "type": "object",
+        "properties": {
+          "rawText": {
+            "type": "string",
+            "description": "The pasted / uploaded transcript text."
+          },
+          "source": {
+            "default": "PASTED",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/TranscriptSource"
+              }
+            ]
+          }
+        },
+        "required": [
+          "rawText"
+        ]
+      },
+      "MeetingActionResultDto": {
+        "type": "object",
+        "properties": {
+          "meeting": {
+            "$ref": "#/components/schemas/MeetingDetailDto"
+          },
+          "proposal": {
+            "nullable": true,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/MeetingProposalDto"
+              }
+            ]
+          },
+          "xeroError": {
+            "type": "object",
+            "nullable": true,
+            "description": "Populated when an attempted Xero write failed (state kept locally)."
+          }
+        },
+        "required": [
+          "meeting"
+        ]
+      },
+      "ConfirmClientDto": {
+        "type": "object",
+        "properties": {
+          "clientId": {
+            "type": "string",
+            "description": "The Client to bill this meeting to."
+          }
+        },
+        "required": [
+          "clientId"
+        ]
+      },
+      "SkipMeetingDto": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string",
+            "description": "Why the meeting is not billable."
+          }
+        }
+      },
+      "DetectedAgreementDto": {
+        "type": "object",
+        "properties": {
+          "potentialClientId": {
+            "type": "string",
+            "description": "PotentialClient id whose sender agreed."
+          },
+          "displayName": {
+            "type": "string",
+            "description": "Display name of the prospective client."
+          },
+          "from": {
+            "type": "string",
+            "description": "Sender address the agreement came from."
+          },
+          "subject": {
+            "type": "string",
+            "description": "Subject line of the agreeing email."
+          },
+          "quote": {
+            "type": "string",
+            "description": "Verbatim sentence evidencing the agreement."
+          },
+          "taskId": {
+            "type": "string",
+            "description": "Id of the CONFIRM_AGREEMENT task raised (absent if one was already open)."
+          }
+        },
+        "required": [
+          "potentialClientId",
+          "displayName",
+          "from",
+          "subject",
+          "quote"
+        ]
+      },
+      "EmailPollResultDto": {
+        "type": "object",
+        "properties": {
+          "mode": {
+            "type": "string",
+            "enum": [
+              "LIVE",
+              "FALLBACK",
+              "DOWN"
+            ],
+            "description": "LIVE = IMAP mailbox, FALLBACK = fixture mailbox, DOWN = IMAP configured but unreachable."
+          },
+          "detail": {
+            "type": "string",
+            "description": "Human explanation of the mode/status."
+          },
+          "polledCount": {
+            "type": "number",
+            "description": "Number of QUEUED/WATCHING potential clients polled."
+          },
+          "messagesRead": {
+            "type": "number",
+            "description": "Number of new messages read from queued senders only."
+          },
+          "agreementsDetected": {
+            "type": "number",
+            "description": "Number of potential clients moved to AGREEMENT_DETECTED this poll."
+          },
+          "tasksRaised": {
+            "type": "number",
+            "description": "Number of new CONFIRM_AGREEMENT tasks raised this poll."
+          },
+          "detected": {
+            "description": "The agreements detected on this poll.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DetectedAgreementDto"
+            }
+          },
+          "polledAt": {
+            "type": "string",
+            "description": "When this poll ran (ISO 8601)."
+          },
+          "nextPollAt": {
+            "type": "string",
+            "description": "When the next scheduled poll is due (ISO 8601, now + 30m)."
+          }
+        },
+        "required": [
+          "mode",
+          "detail",
+          "polledCount",
+          "messagesRead",
+          "agreementsDetected",
+          "tasksRaised",
+          "detected",
+          "polledAt",
+          "nextPollAt"
+        ]
+      },
+      "ProposalSummaryDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "clientId": {
+            "type": "string"
+          },
+          "clientName": {
+            "type": "string",
+            "description": "Resolved client display name"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "meeting",
+              "detection"
+            ],
+            "description": "What this proposal was built from"
+          },
+          "meetingId": {
+            "type": "object",
+            "nullable": true,
+            "description": "Source meeting id, if any"
+          },
+          "detectionId": {
+            "type": "object",
+            "nullable": true,
+            "description": "Source detection id, if any"
+          },
+          "currency": {
+            "type": "string",
+            "example": "GBP"
+          },
+          "subtotal": {
+            "type": "number",
+            "example": 225
+          },
+          "taxTotal": {
+            "type": "number",
+            "example": 45
+          },
+          "total": {
+            "type": "number",
+            "example": 270
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "DRAFT",
+              "IN_REVIEW",
+              "APPROVED",
+              "SENT",
+              "REJECTED"
+            ]
+          },
+          "policyResult": {
+            "$ref": "#/components/schemas/PolicyResultDto"
+          },
+          "lineCount": {
+            "type": "number",
+            "description": "Number of invoice lines"
+          },
+          "autoSent": {
+            "type": "boolean",
+            "description": "Whether Robyn auto-sent this (autonomy ON)"
+          },
+          "reference": {
+            "type": "object",
+            "nullable": true,
+            "description": "Idempotency reference used in Xero"
+          },
+          "xeroInvoiceId": {
+            "type": "object",
+            "nullable": true
+          },
+          "xeroInvoiceNumber": {
+            "type": "object",
+            "nullable": true
+          },
+          "xeroDeepLink": {
+            "type": "object",
+            "nullable": true,
+            "description": "Deep link into the Xero UI"
+          },
+          "createdAt": {
+            "type": "string",
+            "description": "ISO created timestamp"
+          }
+        },
+        "required": [
+          "id",
+          "clientId",
+          "clientName",
+          "source",
+          "currency",
+          "subtotal",
+          "taxTotal",
+          "total",
+          "state",
+          "policyResult",
+          "lineCount",
+          "autoSent",
+          "createdAt"
+        ]
+      },
+      "ProposalEvidenceMeetingDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "start": {
+            "type": "string",
+            "description": "ISO start"
+          },
+          "end": {
+            "type": "string",
+            "description": "ISO end"
+          },
+          "durationHours": {
+            "type": "number"
+          },
+          "state": {
+            "type": "string"
+          },
+          "attendees": {
+            "description": "Attendee emails",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "start",
+          "end",
+          "durationHours",
+          "state",
+          "attendees"
+        ]
+      },
+      "ProposalEvidenceTranscriptDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "object",
+            "nullable": true
+          },
+          "scopeQuotes": {
+            "description": "Verbatim billable-scope quotes",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "excerpt": {
+            "type": "string",
+            "description": "Short raw excerpt for the drill-down"
+          }
+        },
+        "required": [
+          "id",
+          "scopeQuotes",
+          "excerpt"
+        ]
+      },
+      "ProposalEvidenceDetectionDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "valueGbp": {
+            "type": "number"
+          },
+          "summary": {
+            "type": "string",
+            "description": "Detector evidence summary"
+          }
+        },
+        "required": [
+          "id",
+          "type",
+          "valueGbp",
+          "summary"
+        ]
+      },
+      "ProposalEvidenceContractDto": {
+        "type": "object",
+        "properties": {
+          "contractId": {
+            "type": "string"
+          },
+          "clauseLabel": {
+            "type": "object",
+            "nullable": true
+          },
+          "clauseText": {
+            "type": "object",
+            "nullable": true,
+            "description": "Verbatim clause text"
+          }
+        },
+        "required": [
+          "contractId"
+        ]
+      },
+      "ProposalEvidenceDto": {
+        "type": "object",
+        "properties": {
+          "meeting": {
+            "nullable": true,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ProposalEvidenceMeetingDto"
+              }
+            ]
+          },
+          "transcript": {
+            "nullable": true,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ProposalEvidenceTranscriptDto"
+              }
+            ]
+          },
+          "detection": {
+            "nullable": true,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ProposalEvidenceDetectionDto"
+              }
+            ]
+          },
+          "contract": {
+            "nullable": true,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ProposalEvidenceContractDto"
+              }
+            ]
+          }
+        }
+      },
+      "ProposalDetailDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "clientId": {
+            "type": "string"
+          },
+          "clientName": {
+            "type": "string",
+            "description": "Resolved client display name"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "meeting",
+              "detection"
+            ],
+            "description": "What this proposal was built from"
+          },
+          "meetingId": {
+            "type": "object",
+            "nullable": true,
+            "description": "Source meeting id, if any"
+          },
+          "detectionId": {
+            "type": "object",
+            "nullable": true,
+            "description": "Source detection id, if any"
+          },
+          "currency": {
+            "type": "string",
+            "example": "GBP"
+          },
+          "subtotal": {
+            "type": "number",
+            "example": 225
+          },
+          "taxTotal": {
+            "type": "number",
+            "example": 45
+          },
+          "total": {
+            "type": "number",
+            "example": 270
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "DRAFT",
+              "IN_REVIEW",
+              "APPROVED",
+              "SENT",
+              "REJECTED"
+            ]
+          },
+          "policyResult": {
+            "$ref": "#/components/schemas/PolicyResultDto"
+          },
+          "lineCount": {
+            "type": "number",
+            "description": "Number of invoice lines"
+          },
+          "autoSent": {
+            "type": "boolean",
+            "description": "Whether Robyn auto-sent this (autonomy ON)"
+          },
+          "reference": {
+            "type": "object",
+            "nullable": true,
+            "description": "Idempotency reference used in Xero"
+          },
+          "xeroInvoiceId": {
+            "type": "object",
+            "nullable": true
+          },
+          "xeroInvoiceNumber": {
+            "type": "object",
+            "nullable": true
+          },
+          "xeroDeepLink": {
+            "type": "object",
+            "nullable": true,
+            "description": "Deep link into the Xero UI"
+          },
+          "createdAt": {
+            "type": "string",
+            "description": "ISO created timestamp"
+          },
+          "lines": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProposalLineDto"
+            }
+          },
+          "evidence": {
+            "$ref": "#/components/schemas/ProposalEvidenceDto"
+          },
+          "xeroStatus": {
+            "type": "object",
+            "nullable": true,
+            "description": "Live Xero status (DRAFT/AUTHORISED/...) if written"
+          },
+          "xeroError": {
+            "type": "object",
+            "nullable": true,
+            "description": "Last Xero write error, if the write failed"
+          }
+        },
+        "required": [
+          "id",
+          "clientId",
+          "clientName",
+          "source",
+          "currency",
+          "subtotal",
+          "taxTotal",
+          "total",
+          "state",
+          "policyResult",
+          "lineCount",
+          "autoSent",
+          "createdAt",
+          "lines",
+          "evidence"
+        ]
+      },
+      "ProposalActionResultDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "DRAFT",
+              "IN_REVIEW",
+              "APPROVED",
+              "SENT",
+              "REJECTED"
+            ]
+          },
+          "xeroWritten": {
+            "type": "boolean",
+            "description": "Did the Xero write succeed?"
+          },
+          "xeroInvoiceId": {
+            "type": "object",
+            "nullable": true
+          },
+          "xeroInvoiceNumber": {
+            "type": "object",
+            "nullable": true
+          },
+          "xeroDeepLink": {
+            "type": "object",
+            "nullable": true
+          },
+          "xeroError": {
+            "type": "object",
+            "nullable": true,
+            "description": "Xero error message when the write failed"
+          },
+          "subtotal": {
+            "type": "number",
+            "example": 225
+          },
+          "taxTotal": {
+            "type": "number",
+            "example": 45
+          },
+          "total": {
+            "type": "number",
+            "example": 270
+          },
+          "message": {
+            "type": "string",
+            "description": "Human sentence describing what happened"
+          }
+        },
+        "required": [
+          "id",
+          "state",
+          "xeroWritten",
+          "subtotal",
+          "taxTotal",
+          "total",
+          "message"
+        ]
+      },
+      "RejectProposalDto": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string",
+            "example": "Client already paid this in cash — do not invoice.",
+            "description": "Why the proposal was rejected (kept on the audit trail)"
+          }
+        },
+        "required": [
+          "reason"
+        ]
+      },
+      "PatchLinesDto": {
+        "type": "object",
+        "properties": {
+          "lines": {
+            "description": "The full edited line set",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProposalLineDto"
+            }
+          }
+        },
+        "required": [
+          "lines"
+        ]
+      },
+      "DetectionTypeCountsDto": {
+        "type": "object",
+        "properties": {
+          "QUOTE_NOT_INVOICED": {
+            "type": "number",
+            "example": 1
+          },
+          "RETAINER_STOPPED": {
+            "type": "number",
+            "example": 1
+          },
+          "EXPENSE_NOT_RECHARGED": {
+            "type": "number",
+            "example": 1
+          }
+        },
+        "required": [
+          "QUOTE_NOT_INVOICED",
+          "RETAINER_STOPPED",
+          "EXPENSE_NOT_RECHARGED"
+        ]
+      },
+      "DetectionDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "QUOTE_NOT_INVOICED",
+              "RETAINER_STOPPED",
+              "EXPENSE_NOT_RECHARGED"
+            ]
+          },
+          "clientId": {
+            "type": "object",
+            "nullable": true,
+            "description": "Matched client id, if resolved"
+          },
+          "clientName": {
+            "type": "string",
+            "description": "Resolved client display name"
+          },
+          "valueGbp": {
+            "type": "number",
+            "example": 4200,
+            "description": "Recoverable value in GBP"
+          },
+          "summary": {
+            "type": "string",
+            "description": "Human explanation of the leak (from evidence.summary)"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "xero",
+              "local"
+            ],
+            "description": "Which data path produced this detection"
+          },
+          "evidence": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "Flexible per-detector evidence blob (always includes summary + source)"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "OPEN",
+              "PROPOSED",
+              "RESOLVED",
+              "DISMISSED"
+            ]
+          },
+          "proposalId": {
+            "type": "object",
+            "nullable": true,
+            "description": "Proposal built from this detection, if any"
+          },
+          "xeroInvoiceId": {
+            "type": "object",
+            "nullable": true,
+            "description": "Xero invoice id once invoiced"
+          },
+          "createdAt": {
+            "type": "string",
+            "description": "ISO created timestamp"
+          }
+        },
+        "required": [
+          "id",
+          "type",
+          "clientName",
+          "valueGbp",
+          "summary",
+          "source",
+          "evidence",
+          "state",
+          "createdAt"
+        ]
+      },
+      "RunDetectorsResultDto": {
+        "type": "object",
+        "properties": {
+          "source": {
+            "type": "string",
+            "enum": [
+              "xero",
+              "local",
+              "mixed"
+            ],
+            "description": "Primary data path used this run"
+          },
+          "created": {
+            "type": "number",
+            "description": "Number of NEW detections created this run"
+          },
+          "skipped": {
+            "type": "number",
+            "description": "Candidates skipped because a detection already existed (idempotent)"
+          },
+          "counts": {
+            "description": "Newly created, by detector type",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/DetectionTypeCountsDto"
+              }
+            ]
+          },
+          "detections": {
+            "description": "The detections created this run",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DetectionDto"
+            }
+          },
+          "ranAt": {
+            "type": "string",
+            "description": "ISO timestamp of this run"
+          },
+          "message": {
+            "type": "string",
+            "description": "Human sentence describing what happened"
+          }
+        },
+        "required": [
+          "source",
+          "created",
+          "skipped",
+          "counts",
+          "detections",
+          "ranAt",
+          "message"
+        ]
+      },
+      "DetectionProposeResultDto": {
+        "type": "object",
+        "properties": {
+          "detectionId": {
+            "type": "string"
+          },
+          "detectionState": {
+            "type": "string",
+            "enum": [
+              "OPEN",
+              "PROPOSED",
+              "RESOLVED",
+              "DISMISSED"
+            ]
+          },
+          "proposalId": {
+            "type": "string",
+            "description": "The invoice proposal built from this detection"
+          },
+          "proposalReference": {
+            "type": "object",
+            "nullable": true,
+            "description": "Idempotency reference used in Xero"
+          },
+          "subtotal": {
+            "type": "number",
+            "example": 4200
+          },
+          "taxTotal": {
+            "type": "number",
+            "example": 840
+          },
+          "total": {
+            "type": "number",
+            "example": 5040
+          },
+          "taskId": {
+            "type": "object",
+            "nullable": true,
+            "description": "The REVIEW_INVOICE task raised for the human"
+          },
+          "message": {
+            "type": "string",
+            "description": "Human sentence describing what happened"
+          }
+        },
+        "required": [
+          "detectionId",
+          "detectionState",
+          "proposalId",
+          "subtotal",
+          "taxTotal",
+          "total",
+          "message"
+        ]
+      },
+      "DismissDetectionDto": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string",
+            "example": "Client was billed for this separately in cash.",
+            "description": "Why the detection was dismissed (kept on the audit trail)"
+          }
+        }
+      },
+      "DetectionActionResultDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "OPEN",
+              "PROPOSED",
+              "RESOLVED",
+              "DISMISSED"
+            ]
+          },
+          "message": {
+            "type": "string",
+            "description": "Human sentence describing what happened"
+          }
+        },
+        "required": [
+          "id",
+          "state",
+          "message"
+        ]
+      },
+      "TaskDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "PROVIDE_TRANSCRIPT",
+              "CONFIRM_CLIENT_MATCH",
+              "REVIEW_INVOICE",
+              "CONFIRM_AGREEMENT",
+              "ATTACH_CONTRACT"
+            ]
+          },
+          "refType": {
+            "type": "string",
+            "enum": [
+              "MEETING",
+              "PROPOSAL",
+              "POTENTIAL_CLIENT",
+              "CLIENT",
+              "DETECTION"
+            ]
+          },
+          "refId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Id of the referenced subject (meeting, proposal, ...)"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "OPEN",
+              "RESOLVED"
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "object",
+            "nullable": true
+          },
+          "context": {
+            "type": "object",
+            "additionalProperties": true,
+            "nullable": true,
+            "description": "Free-form card context (client name, amount, quote, ...). Includes an `action` { method, path } hint when derivable."
+          },
+          "resolution": {
+            "type": "object",
+            "nullable": true,
+            "description": "Set once resolved by the owning module."
+          },
+          "resolvedAt": {
+            "type": "object",
+            "nullable": true,
+            "format": "date-time"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "type",
+          "refType",
+          "refId",
+          "state",
+          "title",
+          "createdAt"
+        ]
+      },
+      "TaskTypeCountDto": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "PROVIDE_TRANSCRIPT",
+              "CONFIRM_CLIENT_MATCH",
+              "REVIEW_INVOICE",
+              "CONFIRM_AGREEMENT",
+              "ATTACH_CONTRACT"
+            ]
+          },
+          "count": {
+            "type": "number",
+            "description": "Number of OPEN tasks of this type."
+          }
+        },
+        "required": [
+          "type",
+          "count"
+        ]
+      },
+      "TaskCountsDto": {
+        "type": "object",
+        "properties": {
+          "total": {
+            "type": "number",
+            "description": "Total OPEN tasks."
+          },
+          "byType": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TaskTypeCountDto"
+            }
+          }
+        },
+        "required": [
+          "total",
+          "byType"
+        ]
+      },
+      "ConnectionRowDto": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "XERO",
+              "CALENDAR",
+              "EMAIL"
+            ],
+            "description": "Which integration this row describes.",
+            "example": "XERO"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "LIVE",
+              "FALLBACK",
+              "DOWN"
+            ],
+            "description": "LIVE (real credentials working), FALLBACK (running on seed/fixtures), or DOWN (not connected / never run).",
+            "example": "LIVE"
+          },
+          "label": {
+            "type": "string",
+            "nullable": true,
+            "description": "Short label: org name, mailbox address, or calendar id.",
+            "example": "Robyn Demo Co"
+          },
+          "detail": {
+            "type": "string",
+            "nullable": true,
+            "description": "Human explanation of the current status (e.g. the reason a connection is DOWN).",
+            "example": "Connected via Custom Connection."
+          },
+          "lastSyncAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "description": "ISO timestamp of the last successful sync/probe for this integration.",
+            "example": "2026-07-04T10:15:00.000Z"
+          },
+          "nextPollAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "description": "ISO timestamp of the next scheduled poll (EMAIL cron), if any.",
+            "example": "2026-07-04T10:45:00.000Z"
+          }
+        },
+        "required": [
+          "kind",
+          "status",
+          "label",
+          "detail",
+          "lastSyncAt",
+          "nextPollAt"
+        ]
+      },
+      "CalendarEventDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Meeting id.",
+            "format": "uuid"
+          },
+          "title": {
+            "type": "string",
+            "description": "Event title from the calendar."
+          },
+          "start": {
+            "type": "string",
+            "description": "Event start (ISO datetime)."
+          },
+          "end": {
+            "type": "string",
+            "description": "Event end (ISO datetime)."
+          },
+          "state": {
+            "type": "string",
+            "description": "The meeting state driving the colour.",
+            "enum": [
+              "DETECTED",
+              "AWAITING_TRANSCRIPT",
+              "TRANSCRIPT_ATTACHED",
+              "CLIENT_MATCHED",
+              "UNKNOWN_ATTENDEE",
+              "INVOICE_PROPOSED",
+              "SENT",
+              "SKIPPED"
+            ]
+          },
+          "colorKey": {
+            "type": "string",
+            "description": "Colour token for the calendar view. billed=teal, proposal=amber, awaiting=amber-outline, unknown=purple, skipped/personal=gray.",
+            "enum": [
+              "teal",
+              "amber",
+              "amber-outline",
+              "purple",
+              "gray"
+            ]
+          },
+          "clientName": {
+            "type": "string",
+            "description": "Matched client name, or null when unmatched/unknown.",
+            "nullable": true
+          },
+          "proposalId": {
+            "type": "string",
+            "description": "Linked invoice proposal id if one exists for this meeting, else null.",
+            "nullable": true,
+            "format": "uuid"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "start",
+          "end",
+          "state",
+          "colorKey",
+          "clientName",
+          "proposalId"
+        ]
+      },
+      "LeakBreakdownDto": {
+        "type": "object",
+        "properties": {
+          "source": {
+            "type": "string",
+            "description": "Human label for this leak source.",
+            "example": "Invoices in review"
+          },
+          "gbp": {
+            "type": "number",
+            "description": "Recoverable amount (GBP, 2dp) attributable to this source.",
+            "example": 1440
+          },
+          "count": {
+            "type": "number",
+            "description": "Number of items contributing to this source.",
+            "example": 2
+          }
+        },
+        "required": [
+          "source",
+          "gbp",
+          "count"
+        ]
+      },
+      "LeakStripDto": {
+        "type": "object",
+        "properties": {
+          "monthLabel": {
+            "type": "string",
+            "description": "The month this leak strip summarises, e.g. \"June 2026\".",
+            "example": "June 2026"
+          },
+          "recoverableGbp": {
+            "type": "number",
+            "description": "Total recoverable amount (GBP, 2dp): OPEN detections + IN_REVIEW proposals + unbilled meetings.",
+            "example": 2880
+          },
+          "breakdown": {
+            "description": "Per-source breakdown that sums to recoverableGbp.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LeakBreakdownDto"
+            }
+          }
+        },
+        "required": [
+          "monthLabel",
+          "recoverableGbp",
+          "breakdown"
+        ]
+      },
+      "DashboardSummaryDto": {
+        "type": "object",
+        "properties": {
+          "openTasks": {
+            "type": "number",
+            "description": "Number of OPEN tasks in the inbox.",
+            "example": 3
+          },
+          "unbilledGbp": {
+            "type": "number",
+            "description": "Total unbilled exposure across all clients (GBP, 2dp).",
+            "example": 4200
+          },
+          "invoicesSentThisMonth": {
+            "type": "number",
+            "description": "Invoice proposals sent to Xero so far this calendar month.",
+            "example": 1
+          },
+          "clientsCount": {
+            "type": "number",
+            "description": "Number of clients.",
+            "example": 3
+          }
+        },
+        "required": [
+          "openTasks",
+          "unbilledGbp",
+          "invoicesSentThisMonth",
+          "clientsCount"
+        ]
+      }
+    }
   }
 }

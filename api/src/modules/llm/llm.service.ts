@@ -75,15 +75,20 @@ export class LlmService {
   // --- Transcript -> scope items + action points ----------------------------
   async parseTranscript(rawText: string): Promise<TranscriptParsedLLM> {
     const system =
-      'You extract billable work from a freelancer consulting-meeting transcript. ' +
-      'Return strict JSON. For every scope_item, quote the VERBATIM transcript line ' +
-      'that evidences it in evidence_quote. Mark billable=true only for delivered or ' +
-      'agreed work beyond small talk. Estimate est_hours conservatively. Never invent quotes.';
+      'You extract EXTRA billable scope from a freelancer consulting-meeting transcript. ' +
+      'The meeting time itself is ALREADY billed separately from the calendar (do not re-bill it). ' +
+      'So a scope_item is billable=true ONLY when it is ADDITIONAL work agreed BEYOND the meeting: ' +
+      'a new deliverable, an out-of-scope request ("can you also…"), or follow-up work promised on ' +
+      'the call. Anything that was simply discussed or reviewed DURING the meeting is covered by the ' +
+      'meeting time — mark it billable=false. For every scope_item, evidence_quote MUST be the VERBATIM ' +
+      'transcript line that agrees the extra work. Estimate est_hours conservatively. Never invent quotes. ' +
+      'Return strict JSON. It is correct and common for scope_items to be empty.';
     const user =
       'Transcript:\n"""\n' +
       rawText.slice(0, 45000) +
       '\n"""\n\nReturn JSON: {"summary": string|null, "action_points": string[], ' +
-      '"scope_items": [{"description": string, "est_hours": number, "evidence_quote": string, "billable": boolean}]}';
+      '"scope_items": [{"description": string, "est_hours": number, "evidence_quote": string, "billable": boolean}]}. ' +
+      'Only extra work agreed BEYOND the meeting is billable=true.';
     return this.complete(system, user, TranscriptParsedSchema, 2500);
   }
 
