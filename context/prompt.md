@@ -4,8 +4,6 @@ Paste everything below into the remote agent. It runs without Devansh available:
 
 ---
 
-/goal Full end-to-end Robyn: every gate in `context/architecture.md` met, every surface tested through Chrome DevTools MCP, pushed to origin. Do not stop before that. Do not wait for a human at any point.
-
 ## Ground rules
 
 1. Read `context/context.md`, `context/architecture.md`, and `CLAUDE.md` first. They are law. The Xero skills already exist in `.claude/skills/` (G0 committed) — use them, don't regenerate them.
@@ -41,3 +39,5 @@ Script the four demo beats from `context.md` as an end-to-end run against live s
 ## Finish line
 
 Done means, in order: G1–G5 checked off, both QA sweeps green with screenshots in `docs/qa/`, `HANDOFF.md` written (how to run, what credentials Devansh must add, the demo runbook step by step, known rough edges), `context/last_update.md` updated with the decision log, everything committed, `git push origin main`, and a final tag `v0-robyn-e2e`. Print a closing summary of what was built, what was verified live vs via fallback, and the three things Devansh should check first when he lands.
+
+/goal Full end-to-end Robyn: every gate in `context/architecture.md` met, every surface tested through Chrome DevTools MCP, pushed to origin. Do not stop before that. Do not wait for a human at any point.

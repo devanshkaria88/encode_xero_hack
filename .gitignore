@@ -26,3 +26,4 @@ seed/.artifacts/
 __pycache__/
 *.pyc
 web/.env.local
+docker-compose.override.yml
