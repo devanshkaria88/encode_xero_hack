@@ -25,3 +25,4 @@ seed/.artifacts/
 # python skill caches
 __pycache__/
 *.pyc
+web/.env.local
