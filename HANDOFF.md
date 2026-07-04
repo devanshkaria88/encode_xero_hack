@@ -52,6 +52,33 @@ pnpm dev         # api on :4000 (docs /api/docs), web on :3000
 - **Calendar**: Google creds empty → `.ics` upload / seeded `.ics`, identical pipeline. Connections shows CALENDAR as FALLBACK.
 - To go live: paste the creds, restart the API, hit "check now" on the Connections panel.
 
-## Demo runbook — _to be finalised after QA_
+## Demo runbook (3 minutes, verified end to end)
 
-## Known rough edges — _to be finalised after QA_
+Start clean: `pnpm --filter robyn-api seed` then `pnpm dev`, open <http://localhost:3000>. The cold open shows **3 tasks** and the leak strip **"£2,880 recoverable in June 2026"**.
+
+1. **Cold open on the Tasks inbox (20s).** Three cards waiting: a meeting missing its transcript, an agreement email to confirm, an invoice in review. "This is my back office now." Point at the leak strip.
+2. **Rule 1 live — transcript to invoice (70s).** On the *Provide transcript* card (Fenwick kitchen fit-out review), paste a Granola transcript that includes an extra ask (e.g. "can you also spec the utility room, that is new work"). Robyn matches the client, pulls the contract, and builds the proposal: **1.5h calendar block @ £150 cited to Clause 3.1 + the utility room 3h caught from the transcript with the verbatim quote = £810 inc. VAT**. Open *Show evidence*, then **Approve & send to Xero** (writes the invoice with a decision note + evidence attachment once Xero is live; until then it says "Xero connection pending, invoice ready to send").
+3. **Rule 2 live — email to client (50s).** The *Confirm agreement* card shows Priya Nair's verbatim "Let's go ahead." **Confirm and create client** → Priya becomes a client (Robyn creates the Xero contact when live) and Robyn asks for her contract. New client onboarded from a calendar event and an email, zero forms.
+4. **Auto-send + close (40s).** Open **Clients** → Halcyon Retail has autonomy **ON**: its monthly retainer invoice goes out on its own within contract terms (shown in Xero once live; the 5 auto-sent history invoices are on the card). Leak strip: "June: £2,880 was walking away." Map to the rubric: real problem + Xero depth (50%), Accounting/Payments API (30%), production-ready architecture — the Connections panel and audit trail (20%).
+
+Supporting surfaces to show if asked: **Calendar** (every block colour-coded by whether it's been paid for; click any event for its evidence chain), **Invoices** (every line's provenance chip + the "Money Robyn found" ledger detections), **Connections** (honest LIVE/FALLBACK/DOWN health).
+
+## What is verified live vs via fallback
+
+- **Live now:** the reconciliation engine (29 unit tests), Loop 1 transcript→invoice with the real Anthropic LLM, Loop 2 email agreement detection, Loop 3 detectors, the whole dashboard, all state transitions and the audit trail. Screenshots of every beat are in `docs/qa/`.
+- **Live the moment you fix the Xero creds** (top of this file): contact create, ACCREC invoice draft/authorise, History note, Attachment, Payments read, aged receivables. The code paths exist and are exercised; they currently catch the auth error and surface "Xero connection pending" instead of writing. Run `pnpm --filter robyn-api verify:xero` to confirm, then `pnpm --filter robyn-api seed` to populate the Xero org.
+- **Fallback by design (no creds present):** calendar via the seeded `.ics`, email via the fixture mailbox. Both are shown honestly as FALLBACK on the Connections panel and swap to live when you add Google/IMAP creds.
+
+## Three things to check first when you land
+
+1. **Fix the Xero Custom Connection** (top of this file) and run `pnpm --filter robyn-api verify:xero` until it prints `G0 PASS`, then `pnpm --filter robyn-api seed`. This turns every "Xero connection pending" into a real write.
+2. **Walk the demo runbook once** against your own machine to get the timing, especially pasting your own Granola transcript in beat 2.
+3. **Skim the Connections panel** — it is the judges' production-readiness read; confirm it tells the truth about what is live vs demo data on your setup.
+
+## Known rough edges
+
+- Xero writes are gated on the Custom Connection fix — this is the one human step. Everything else runs unattended.
+- Google Calendar OAuth is coded (read-only, `googleapis` dynamic import gated on a token) but only the `.ics` path is exercised in the demo. IMAP is coded but only the fixture mailbox is exercised.
+- The LLM transcript parse is live and conservative (only work *beyond* the meeting time is billed), but output quality depends on the transcript — the human always reviews unless autonomy is ON.
+- In dev mode React Strict Mode double-fires fetches; you'll see duplicate 200s in DevTools. Harmless; production build does not.
+- Schema is TypeORM `synchronize` (no migrations) — fine for the demo, not for production.
