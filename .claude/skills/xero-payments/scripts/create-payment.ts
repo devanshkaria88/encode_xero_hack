@@ -222,8 +222,9 @@ async function main(): Promise<void> {
   // ---- Idempotency check-by-reference (ALWAYS runs) ------------------------
   // Runs BEFORE the status/amount asserts so a rerun after a successful full
   // payment reports the skip, not an error. Whether the embedded Payments array
-  // on GET /Invoices/{id} carries Reference/Status is UNVERIFIED — check before
-  // relying: verify on the live org at G2 and record the shape in SKILL.md. If
+  // on GET /Invoices/{id} carries Reference/Status is
+  // UNVERIFIED — check before relying
+  // (verify on the live org at G2 and record the shape in SKILL.md). If
   // Reference is absent from the embedded array this skip never matches; the
   // status/AmountDue asserts below are the backstop. Durable record: PaymentID
   // persisted in Postgres by the caller.
