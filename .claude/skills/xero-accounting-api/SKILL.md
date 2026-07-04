@@ -9,10 +9,10 @@ Base `https://api.xero.com/api.xro/2.0/{Resource}`. Send `Accept: application/js
 
 ## ⚠️ Pre-flight — do this FIRST (skipping it costs hours)
 
-1. **Assert env non-empty before any call.** `XERO_CLIENT_ID` and `XERO_CLIENT_SECRET` live in `.env` at the repo root, never committed, never logged. Empty values surface from Xero as `unauthorized_client` (because `client_id=` got sent), which points away from the real cause. `requireEnv()` in `scripts/xero-fetch.ts` throws `MissingEnv: XERO_CLIENT_ID is empty — ...` at first use.
+1. **Assert env non-empty before any call.** `XERO_CLIENT_ID` and `XERO_CLIENT_SECRET` live in `.env` at the repo root, never committed, never logged. Empty values surface from the token endpoint as 400 `invalid_request` (verified empirically 2026-07-04), which points away from the real cause. `requireEnv()` in `scripts/xero-fetch.ts` throws `MissingEnv: XERO_CLIENT_ID is empty — ...` at first use.
 2. **No tenant id — here is why.** A Custom Connection "utilise[s] the client credentials grant type to access data from a single Xero organisation" — one org per connection, so the tenant is implicit. The docs' canonical custom-connection API call carries exactly two headers: `Authorization: Bearer <token>` and `Accept: application/json`. (An explicit docs sentence "the xero-tenant-id header is not required" does not exist — UNVERIFIED — check before relying; the basis is the single-org binding plus its omission from the documented call.)
 3. **Scopes are set at BOTH ends** — selected at app creation AND passed as `scope` in every token request body (this differs from code/PKCE flow where scopes ride the URL). This project's app selects `accounting.transactions accounting.contacts accounting.attachments accounting.reports.read` (see `.env.example`). A token minted without the needed scope 403s at runtime. Granular-scope migration: from 29 April 2026 all custom connections have granular scopes (`accounting.invoices` covers Invoices AND PurchaseOrders); existing connections may keep broad scopes until September 2027. Whether a brand-new custom connection can still select broad scopes today, and the exact granular report scope for aged payables: UNVERIFIED — check before relying (check the app dashboard scope picker).
-4. **Smoke-test before wiring anything:** `npx tsx .claude/skills/xero-accounting-api/scripts/bills.ts` must print a bill count and a `pagination` object. If it fails here, fix auth first — Xero's errors deeper in are less useful.
+4. **Smoke-test before wiring anything:** from the repo root, `npx tsx .claude/skills/xero-accounting-api/scripts/bills.ts` must print a bill count and a `pagination` object. tsx does not auto-load `.env` — the scripts self-load the repo-root `.env` via `loadDotEnv()` in `scripts/xero-fetch.ts` (never overriding already-exported vars). If it fails here, fix auth first — Xero's errors deeper in are less useful.
 5. **Reports need the reports role.** "An application that has been authorised by a Standard user without the 'reports' role will not be able to access the Reports ... endpoints (A HTTP 403 error will be returned)." Have the org admin who authorises the connection hold that role.
 
 ## Conventions on every call
@@ -98,12 +98,12 @@ ACCPAY does **not** support discounts (`DiscountRate`/`DiscountAmount` are ACCRE
 
 - **`AUTHORISED` locks.** Journals are created and payments can now be applied; it can never return to `DRAFT`/`SUBMITTED` and cannot be deleted — only `VOIDED` (and voiding is shown only for invoices with no payments applied).
 - **`PAID` is system-set** when fully paid. Never write it; a "paid" bill is a two-step: `AUTHORISED`, then a Payment (see `xero-payments`). No transitions are documented out of `PAID`, `VOIDED`, `DELETED` — treat as terminal.
-- Invoices in a **locked period** cannot be updated. Partially/fully paid ACCPAY bills allow edits only to: Reference, DueDate, InvoiceNumber, BrandingThemeID, Contact (with CIS/credit-note caveats), Url, line Description, AccountCode (non-CIS), Tracking, PlannedPaymentDate.
+- Invoices in a **locked period** cannot be updated. Partially/fully paid ACCPAY bills allow edits only to: DueDate, InvoiceNumber, BrandingThemeID, Contact (with CIS/credit-note caveats), Url, line Description, AccountCode (non-CIS), Tracking, PlannedPaymentDate. (The docs' list also names Reference, but the `Reference` field is ACCREC-only and does not persist on ACCPAY — use `InvoiceNumber`.)
 - **Line-item update rule:** in an update, a line WITH `LineItemID` is updated, WITHOUT one is created, and any existing line whose id is missing from a supplied `LineItems` array is **deleted**. Status-only updates (as in the docs' delete example) send no `LineItems` at all.
 
 ### Listing
 
-- Optimised `where` equality fields: Status, Contact.ContactID, Contact.Name, Contact.ContactNumber, Reference, InvoiceNumber, InvoiceId, Type, AmountPaid; range (`>`, `>=`, `<`, `<=`) also on Date, DueDate, AmountDue.
+- Optimised `where` equality fields: Status, Contact.ContactID, Contact.Name, Contact.ContactNumber, Reference (ACCREC-only — filter bills on `InvoiceNumber`), InvoiceNumber, InvoiceId, Type, AmountPaid; range (`>`, `>=`, `<`, `<=`) also on Date, DueDate, AmountDue.
 - Faster than `where` for lists: `?Statuses=AUTHORISED,DRAFT`, `?IDs=`, `?InvoiceNumbers=`, `?ContactIDs=` (comma-separated). `SearchTerm` text-searches InvoiceNumber + Reference.
 - Default order `UpdatedDateUTC ASC, InvoiceId ASC`; optimised order fields: InvoiceId, UpdatedDateUTC, Date.
 - **Always page**: paged responses include full `LineItems`; an unpaged multi-invoice GET returns contact summaries and NO line details. `summaryOnly=true` drops Payments/LineItems/HasAttachments and forces pagination.
@@ -134,7 +134,7 @@ Because ACCPAY `InvoiceNumber` is non-unique, "does this bill already exist?" mu
 > ⚠️ **NOT IN THE MCP SERVER** — raw API only.
 
 - **Upload:** PUT or POST with the **raw file bytes** as the body — not JSON. `Content-Type` = the file's MIME type. PUT and POST are identical; the same filename on the same document **overwrites**. Example: `PUT /api.xro/2.0/Invoices/{InvoiceID}/Attachments/evidence.pdf`.
-- **Limits:** **10 attachments per document, each up to 10MB** (the Contacts page says 25MB per file — the two official pages conflict; assume 10MB, do not rely on more without testing: UNVERIFIED above 10MB).
+- **Limits:** **10 attachments per document, each up to 10MB** (the Contacts page says 25MB per file — the two official pages conflict; assume 10MB. Anything above 10MB is UNVERIFIED — check before relying).
 - **Filename rules:** any of `< > : " / \ | ? * NUL +` → rejected as Bad Request. Special characters must NOT be percent-encoded — except brackets, which MUST be encoded or the call fails.
 - **List:** `GET /{Endpoint}/{Guid}/Attachments/` → `Attachments[]` of `{AttachmentID, FileName, Url, MimeType, ContentLength}`. **Fetch content:** GET the `Url` (`.../Attachments/{Filename}`) — returns raw bytes with the file's `Content-Type` and a `Content-Disposition: attachment` header, no JSON wrapper.
 - **`?IncludeOnline=true`** on the upload URL makes the attachment visible on the online invoice — but only for **accounts receivable invoices and AR credit notes**. It does not apply to ACCPAY bills, so it is irrelevant to this project's evidence uploads; the response echoes `"IncludeOnline": true` when used.
@@ -151,7 +151,7 @@ Exact PUT shape (POST behaves identically):
 ```
 
 - `Details` max **2500 chars**; multiple notes per call allowed.
-- The note displays the **date of creation** and user **"System Generated"** — notes cannot be backdated, updated, or deleted, and Notes are the only Change type you can create.
+- The note displays the **date of creation** and user **"System Generated"**. Updating notes is documented as impossible; no delete method is documented, and records are created system-dated — the payload carries no date field (delete/backdate: UNVERIFIED — check before relying). Notes are the only Change type you can create.
 - GET returns `HistoryRecords[]` of `{Changes, DateUTC, User, Details}` (e.g. `Changes: "Approved"`).
 - Supported parents: BankTransactions, BatchPayments, BankTransfers (via BankTransactions), Contacts, Creditnotes, Invoices, Items, ManualJournals, Overpayments, Payments, Prepayments, Purchase Orders, Repeating Invoices, Quotes.
 
@@ -174,7 +174,7 @@ Exact PUT shape (POST behaves identically):
 
 | Param | Notes |
 |---|---|
-| `ContactID` | **REQUIRED** — guid. Parameter table spells it `contactID`, the docs' example URL uses `ContactID`; casing tolerance UNVERIFIED — match the example: `?ContactID={guid}` |
+| `ContactID` | **REQUIRED** — guid. Parameter table spells it `contactID`, the docs' example URL uses `ContactID`; casing tolerance UNVERIFIED — check before relying — match the example: `?ContactID={guid}` |
 | `date` | payments up to this date; defaults to end of current month |
 | `fromDate` / `toDate` | payable-invoice window for the contact |
 
@@ -182,20 +182,22 @@ Response: `Reports[0].Rows[]`, each `RowType` one of `Header` (column labels: Da
 
 ## Snippets
 
-All compile standalone (strict, ES2022, commonjs, `@types/node` only) and import nothing but node builtins and `./xero-fetch`. Run with `npx tsx <file>` from the repo root with the `.env` vars exported into the environment first (tsx does not auto-load `.env`).
+All compile standalone (strict, ES2022, commonjs, `@types/node` only) and import nothing but node builtins and `./xero-fetch`. Run with `npx tsx <file>` from the repo root — tsx does not auto-load `.env`, so `xero-fetch.ts` self-loads the repo-root `.env` via `loadDotEnv()` (comments/blanks skipped, leading `export ` tolerated, matching quotes stripped, already-set env vars never overridden).
 
 | File | Shows |
 |---|---|
-| `scripts/xero-fetch.ts` | the thin helper: env assertion, token cache, `Accept: application/json`, query encoding, 429/`Retry-After` retry, 400-envelope parsing, `assertElementOk` |
+| `scripts/xero-fetch.ts` | the thin helper: `.env` self-load, env assertion, token cache, `Accept: application/json`, query encoding, 429/`Retry-After` retry (re-obtains the token per attempt), 400-envelope parsing, `assertElementOk`, `Pagination` |
 | `scripts/bills.ts` | list ACCPAY with `where`/order/page/If-Modified-Since, create bill (PUT + idempotency key + `summarizeErrors=false`), legal status walk |
 | `scripts/purchase-orders.ts` | PO create/list/get, status update incl. `BILLED` |
 | `scripts/attachments.ts` | raw-bytes upload onto an invoice, filename guard, list |
 | `scripts/history-note.ts` | append the agent's decision note (exact PUT shape), read history |
-| `scripts/suppliers-and-report.ts` | contact lookup by Name/EmailAddress/searchTerm, aged payables + row walker |
+| `scripts/suppliers-and-report.ts` | contact lookup by Name/EmailAddress/SearchTerm, aged payables + row walker |
 
 ## Traps (these bite in production)
 
 - **ACCPAY `InvoiceNumber` is non-unique and shows up as "Reference" in the Xero UI.** Existence checks must combine ContactID + InvoiceNumber + Total, or persist `InvoiceID`.
+- **The Invoice `Reference` field is ACCREC-only and does NOT persist on ACCPAY bills** (per the official OpenAPI spec) — set and filter `InvoiceNumber` on bills, never `Reference`.
+- **Query-param casing drifts across the official docs** (`?status=DRAFT` vs `Status`, `?SearchTerm=` vs `searchTerm`); case-sensitivity is UNVERIFIED — check before relying — the snippets match the documented example casing; do the same.
 - **A 200 is not success on batch writes.** With `summarizeErrors=false`, failed elements hide inside a 200 — assert `StatusAttributeString` per element.
 - **Omitting `LineItemID`s in an update deletes those lines.** Send every existing line's id, or send no `LineItems` at all for status-only updates.
 - **Unpaged list calls silently drop data**: multi-invoice GETs lose LineItems; unpaged Contacts lose fields; `summaryOnly` loses `IsSupplier`. Always `?page=`.
@@ -205,14 +207,16 @@ All compile standalone (strict, ES2022, commonjs, `@types/node` only) and import
 - **`AUTHORISED` is a one-way door** — no edits back to DRAFT, no delete, only VOIDED (unpaid only). Do the match BEFORE approving.
 - **Locked periods reject updates** with a validation error even on otherwise-legal transitions.
 - **`IncludeOnline` is AR-only** — it does nothing for ACCPAY bills.
-- **History notes are permanent and timestamped at creation** — never write anything into a note you would not show an auditor.
+- **History notes are timestamped at creation and no delete method is documented** — never write anything into a note you would not show an auditor.
 - **The PO endpoint never creates contacts** (unlike invoice creation by contact name, which spawns duplicates) — resolve the ContactID first.
 
 ## Error → real cause
 
 | Symptom | Real cause |
 |---|---|
-| `unauthorized_client` from the token endpoint | empty/missing `XERO_CLIENT_ID`/`XERO_CLIENT_SECRET` — assert env before building the request |
+| Token 400 `invalid_request` (verified 2026-07-04) | empty client id in the Basic header, missing Authorization header, or a JSON body instead of form-encoding — assert env before building the request |
+| Token 400 `invalid_client` (verified 2026-07-04) | wrong-but-nonempty credentials, or malformed Basic encoding |
+| `unauthorized_client` from the token endpoint | the app is not a Custom Connection, or the client_credentials grant is not enabled for it |
 | `invalid_scope` / 403 on a call that used to work | scope missing from app config or token request; scopes live at BOTH ends (see pre-flight 3) |
 | 403 on `/Reports/...` only | authorising user lacks the 'reports' role |
 | HTTP 400 + `ApiException` | validation failure — read `Elements[].ValidationErrors[].Message` |
@@ -231,11 +235,11 @@ All compile standalone (strict, ES2022, commonjs, `@types/node` only) and import
 
 <!--
 Sources (fact sheets verified 2026-07-04 against developer.xero.com, plus cloned repos):
-- .tmp/xero-refs/undefined/style.md            — prompt-library skill discipline; error→cause quotes; scope tables; contact-dedup trap
-- .tmp/xero-refs/undefined/docs-accounting.md  — Invoices/PurchaseOrders/Payments/Types pages: fields, status tables, where examples, pagination
-- .tmp/xero-refs/undefined/docs-evidence.md    — Attachments/HistoryAndNotes/Reports/Contacts pages: upload mechanics, size-cap conflict, note shape, report rows, contact filters
-- .tmp/xero-refs/undefined/docs-auth.md        — custom connections, rate limits, requests-and-responses conventions, idempotency guide, 400 envelope example
-- .tmp/xero-refs/ap-symfony.md                 — AP endpoint quartet (/Invoices bills, /PurchaseOrders, /Payments, /Contacts)
-- .tmp/xero-refs/mcp.md + xero-mcp-server repo — "no purchase order / attachment / history tools" (verified by grep)
+- .tmp/xero-refs/facts/style.md            — prompt-library skill discipline; error→cause quotes; scope tables; contact-dedup trap
+- .tmp/xero-refs/facts/docs-accounting.md  — Invoices/PurchaseOrders/Payments/Types pages: fields, status tables, where examples, pagination
+- .tmp/xero-refs/facts/docs-evidence.md    — Attachments/HistoryAndNotes/Reports/Contacts pages: upload mechanics, size-cap conflict, note shape, report rows, contact filters
+- .tmp/xero-refs/facts/docs-auth.md        — custom connections, rate limits, requests-and-responses conventions, idempotency guide, 400 envelope example
+- .tmp/xero-refs/facts/ap-symfony.md       — AP endpoint quartet (/Invoices bills, /PurchaseOrders, /Payments, /Contacts)
+- .tmp/xero-refs/facts/mcp.md + xero-mcp-server repo — "no purchase order / attachment / history tools" (verified by grep)
 Doc URLs: developer.xero.com/documentation/api/accounting/{invoices,purchaseorders,attachments,historyandnotes,reports,contacts,types,requests-and-responses,responsecodes}; /documentation/guides/oauth2/{custom-connections,limits}; /documentation/guides/idempotent-requests/idempotency
 -->

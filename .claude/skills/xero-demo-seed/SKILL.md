@@ -9,12 +9,13 @@ One seeded org: 15 UK trade supplier contacts, 15 AUTHORISED purchase orders, 15
 
 ## ⚠️ Pre-flight — do this FIRST (before any write)
 
-Run `scripts/preflight.ts` (read-only; compile per §Snippets). It asserts, in order:
+Run `npx tsx .claude/skills/xero-demo-seed/scripts/preflight.ts` from repo root (read-only). It asserts, in order:
 
-1. **`XERO_CLIENT_ID` and `XERO_CLIENT_SECRET` are non-empty**, with named `MissingEnv` errors. Empty secrets surface from Xero as `unauthorized_client` (because `client_id=undefined` got sent), which points away from the real cause. Secrets live in `.env` at repo root — never committed, never logged; the script logs `client_id_len`, never the value.
-2. **A `client_credentials` token mints and its granted `scope` contains `accounting.contacts` and `accounting.invoices`.** Custom-connection scopes are configured at BOTH ends — selected on the app config AND sent in the token request body. A token missing a scope 403s later at the worst moment; fail here with a named `MissingScope` error instead.
-3. **`GET /api.xro/2.0/Organisations` returns 200** and the script prints the raw body so a human confirms it is the DEMO org (and that the base currency is GBP) before anything is written. Seeding a real org is unrecoverable on demo day.
-4. (Manual, once) **Pick the expense account for line items**: set `XERO_SEED_ACCOUNT_CODE` in `.env` to an expense account whose default tax rate is 20% VAT on purchases. Omit `TaxType` on lines so the AccountCode default applies — that mechanism is documented; the exact UK 20% TaxType code (commonly cited as `INPUT2`) is UNVERIFIED — check before relying.
+1. **`XERO_CLIENT_ID` and `XERO_CLIENT_SECRET` are non-empty**, with named `MissingEnv` errors. An empty client id surfaces from the token endpoint as 400 `invalid_request` (because `client_id=` got sent), which points away from the real cause. Secrets live in `.env` at repo root — never committed, never logged; the script logs `client_id_len`, never the value.
+2. **A `client_credentials` token mints and its granted `scope` lists exactly the whole scope tokens `accounting.transactions` and `accounting.contacts`.** Compare as a Set of whole tokens split on whitespace, NEVER by substring — `"accounting.contacts.read".includes("accounting.contacts")` is `true`, so a substring check false-passes a read-only misconfiguration and the seed 403s on its first create instead. Custom-connection scopes are configured at BOTH ends — selected on the app config AND sent in the token request body. Fail here with a named `MissingScope` error instead of at the worst moment mid-seed.
+3. **`GET https://api.xero.com/connections` returns 200** and the script prints `tenantName` so a human confirms it is the DEMO org before anything is written. Seeding a real org is unrecoverable on demo day. Do NOT use `GET /api.xro/2.0/Organisation` for this: it requires `accounting.settings` or `accounting.settings.read`, which this project's app does not carry, so it 403s every run. The connections route is the same one xero-auth's `verify-auth.ts` uses.
+4. (Manual, once) **Confirm the org base currency is GBP in the Xero UI** (check org settings). An automated `BaseCurrency` check would need `accounting.settings.read`, which the project app does not carry — this stays a human pre-flight checklist item.
+5. (Manual, once) **Pick the expense account for line items**: set `XERO_SEED_ACCOUNT_CODE` in `.env` to an expense account whose default tax rate is 20% VAT on purchases. Omit `TaxType` on lines so the AccountCode default applies — that mechanism is documented; the exact UK 20% TaxType code (commonly cited as `INPUT2`) is UNVERIFIED — check before relying.
 
 ## Auth model — why there is no `XERO_TENANT_ID`
 
@@ -22,7 +23,7 @@ Run `scripts/preflight.ts` (read-only; compile per §Snippets). It asserts, in o
 - Token endpoint: `POST https://identity.xero.com/connect/token` with `Authorization: Basic base64(client_id:client_secret)`, `Content-Type: application/x-www-form-urlencoded`, body `grant_type=client_credentials&scope=...`.
 - Xero's own custom-connection call example sends only `Authorization: Bearer ...` and `Accept` — **no `xero-tenant-id` header** (unlike code-flow tokens, where it is required). An explicit docs sentence "the header is not required" does not exist — UNVERIFIED — check before relying; the canonical example omitting it is the evidence.
 - Token lifetime ~30 min (`expires_in` is authoritative); the response has **no `refresh_token`** — re-mint when needed. A full seed run fits in one token.
-- Scopes for seeding: `accounting.contacts accounting.invoices`. Granular only (new custom connections get granular scopes from 29 April 2026); `accounting.invoices` grants Invoices AND PurchaseOrders.
+- Scopes for seeding: `accounting.transactions accounting.contacts` — a strict SUBSET of the four scopes assigned to the project's single app (`accounting.transactions accounting.contacts accounting.attachments accounting.reports.read`). There is no separate seed app; requesting any scope outside the assigned set gets 400 `invalid_scope` from the token endpoint. `accounting.transactions` grants Invoices AND PurchaseOrders; `accounting.contacts` grants Contacts.
 - Custom Connections are UK-available (AU/NZ/UK/US only, paid subscription; free against the Xero Demo Company for development).
 
 ## The cast — 15 UK trade suppliers (transcribe exactly)
