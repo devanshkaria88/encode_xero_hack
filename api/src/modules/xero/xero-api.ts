@@ -312,7 +312,107 @@ export async function agedReceivablesByContact(contactId: string): Promise<any> 
 // ---- Deep link ------------------------------------------------------------
 
 export async function invoiceDeepLink(invoiceId: string): Promise<string> {
-  const t = await resolveTenant();
-  // The go.xero.com deep link for a receivable invoice.
-  return `https://go.xero.com/app/${t?.id ? '' : ''}invoicing/view/${invoiceId}`;
+  // The go.xero.com deep link for a receivable invoice (opens in the org UI).
+  return `https://go.xero.com/app/invoicing/view/${invoiceId}`;
+}
+
+// ---- Composed write: the money moment (G2) --------------------------------
+// One idempotent path used by BOTH the auto-send loop and the manual approve
+// flow. Ensures the contact, creates the ACCREC invoice (draft or authorised),
+// writes Robyn's decision note to History, and attaches the evidence. Takes
+// plain data and returns plain data — callers persist. Every step is safe to
+// re-run (check-by-reference on the invoice, overwrite-by-filename on attachments).
+
+export interface WriteInvoiceEvidence {
+  filename: string; // e.g. "robyn-evidence.txt" (no < > : " / \ | ? * +)
+  text: string;
+  mimeType?: string; // default text/plain
+}
+
+export interface WriteInvoiceInput {
+  clientName: string;
+  clientEmail?: string;
+  existingContactId?: string; // reuse if we already know it
+  reference: string; // stable idempotency key -> Xero Reference
+  lines: XeroLineItem[];
+  currency?: string;
+  date?: string;
+  dueDate?: string;
+  authorise: boolean; // false => leave DRAFT; true => AUTHORISED (sent)
+  decisionNote: string; // Robyn's reasoning -> History & Notes
+  evidence?: WriteInvoiceEvidence[]; // transcript excerpt + contract clause
+}
+
+export interface WriteInvoiceResult {
+  contactId: string;
+  contactCreated: boolean;
+  invoiceId: string;
+  invoiceNumber: string | null;
+  status: string | null;
+  total: number | null;
+  deepLink: string;
+  alreadyExisted: boolean;
+}
+
+export async function writeInvoice(input: WriteInvoiceInput): Promise<WriteInvoiceResult> {
+  // 1. Contact (idempotent)
+  let contactId = input.existingContactId ?? null;
+  let contactCreated = false;
+  if (!contactId) {
+    const { contact, created } = await ensureContact(input.clientName, input.clientEmail);
+    contactId = contact.ContactID;
+    contactCreated = created;
+  }
+
+  // 2. Invoice (idempotent by Reference)
+  const { invoice, created } = await createInvoice({
+    contactId,
+    reference: input.reference,
+    lineItems: input.lines,
+    currencyCode: input.currency,
+    date: input.date,
+    dueDate: input.dueDate,
+    status: input.authorise ? 'AUTHORISED' : 'DRAFT',
+  });
+  const invoiceId = invoice.InvoiceID as string;
+
+  // 3. If it existed as DRAFT but we now want it AUTHORISED, walk it up.
+  let status = invoice.Status ?? null;
+  if (input.authorise && status !== 'AUTHORISED' && status !== 'PAID') {
+    const authed = await authoriseInvoice(invoiceId);
+    status = authed.Status ?? status;
+  }
+
+  // 4. Robyn's decision note -> History (raw API; no MCP tool).
+  try {
+    await addHistoryNote('Invoices', invoiceId, input.decisionNote);
+  } catch {
+    /* history is best-effort; never block the money moment on a note */
+  }
+
+  // 5. Evidence attachments -> raw API (overwrite-by-filename is idempotent).
+  for (const ev of input.evidence ?? []) {
+    try {
+      await uploadAttachment(
+        'Invoices',
+        invoiceId,
+        ev.filename,
+        new TextEncoder().encode(ev.text),
+        ev.mimeType ?? 'text/plain',
+      );
+    } catch {
+      /* attachment is best-effort evidence */
+    }
+  }
+
+  return {
+    contactId,
+    contactCreated,
+    invoiceId,
+    invoiceNumber: invoice.InvoiceNumber ?? null,
+    status,
+    total: invoice.Total ?? null,
+    deepLink: await invoiceDeepLink(invoiceId),
+    alreadyExisted: !created,
+  };
 }

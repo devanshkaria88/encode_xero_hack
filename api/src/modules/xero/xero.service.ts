@@ -27,6 +27,9 @@ export class XeroService {
   uploadAttachment = api.uploadAttachment;
   listAttachments = api.listAttachments;
 
+  // The composed money-moment write (G2): contact + invoice + history + attachment.
+  writeInvoice = api.writeInvoice;
+
   // Payments / quotes / accounts / reports
   listPayments = api.listPayments;
   createPayment = api.createPayment;
