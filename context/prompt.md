@@ -17,7 +17,6 @@ Clone shallow into `.tmp/xero-refs/` (gitignored):
 
 Study before writing anything:
 - `xero-prompt-library/*/SKILL.md` — Xero's own skill-writing style, especially the Lovable ones. Their auth guidance is Lovable/Supabase-flavoured; DO NOT copy the runtime specifics, DO copy their discipline: pre-flight checks first, exact error → real cause tables, scope minimalism, token handling rules.
-- `xero-prompt-library/php/accounts-payable-symfony.txt` — the closest bootstrap prompt to our domain; mine it for AP entity/endpoint hints.
 - `xero-mcp-server/src/handlers/` — the definitive list of what MCP can and cannot do.
 
 ## Step 2 — write these skills into `.claude/skills/`
@@ -29,22 +28,24 @@ Custom Connections (client_credentials): token endpoint, scopes we need (`accoun
 
 ### `xero-accounting-api`
 The endpoints this project touches, with request/response shapes trimmed to fields we use:
-- Invoices type ACCPAY (bills): list with where/order/page, create, update status DRAFT→SUBMITTED→AUTHORISED, line items, `LineAmountTypes`.
-- **Purchase Orders: NOT in the MCP server — raw API only.** Full CRUD shapes, status flow, marking billed.
-- Attachments: upload onto an invoice (raw bytes PUT, content-type, filename rules, 25MB cap), list, the online-invoice visibility flag.
+- Invoices type ACCREC (sales): list with where/order/page, line items and their descriptions/dates (billing-profile inference and coverage checks read these), create DRAFT invoices with provenance in line descriptions.
+- Quotes: list, statuses (SENT/ACCEPTED/INVOICED), the link (or absence of one) between an accepted quote and a subsequent invoice.
+- Payments: list per contact, dates and amounts (retainer-cadence detection feeds on this).
+- Billable expenses / expense claims assigned to customers, and how to tell whether they ever appeared on an ACCREC invoice.
+- Attachments: upload onto an invoice (raw bytes PUT, content-type, filename rules, 25MB cap) — transcript-excerpt evidence lands here.
 - History/Notes: append the agent's decision note to any document.
-- Contacts: list + fuzzy-relevant fields (Name, EmailAddress).
-- Reports: aged payables by contact.
+- Contacts: list + matching-relevant fields (Name, EmailAddress), create.
+- Reports: aged receivables by contact.
 Pagination (100/page), `If-Modified-Since`, `where` filter syntax and its quoting traps, validation error envelope shape (`Elements[].ValidationErrors`), and rate limits (60/min, 5,000/day per tenant; 429 handling with `Retry-After`).
 
 ### `xero-payments`
-Creating a Payment against an AUTHORISED ACCPAY invoice: required fields (Invoice, Account with `EnablePaymentsToAccount` or bank account code, Date, Amount), partial vs full, common rejection causes (unauthorised invoice, wrong account class, currency mismatch). This is the judged "Payments API" moment — the snippet must work first try.
+Reading Payments effectively (per-contact history, dates, amounts, linkage to invoices) for cadence detection, and creating a Payment against an AUTHORISED ACCREC invoice for the paid-tracking stretch: required fields (Invoice, Account with `EnablePaymentsToAccount` or bank account code, Date, Amount), common rejection causes. Payments data is named in the Track 3 brief — the read path is the judged moment here.
 
 ### `xero-mcp-usage`
 When to use the MCP server vs raw API in THIS project (table from `architecture.md`), how to run the MCP server locally against our custom connection env vars, and the tool-name → handler mapping for the ~10 tools we actually use. Note explicitly: no PO tools, no attachment tools — those route to `xero-accounting-api`.
 
 ### `xero-demo-seed`
-Seeding the demo org so the data tells a story: ~15 realistic UK suppliers, bills mostly matchable, 2 deliberate gaps (one missing receipt, one amount mismatch), matching POs raised in Xero, the Google Sheet receipt log schema (columns: date, po_ref, supplier, items, qty, signed_by, photo_link), and idempotency (seed script safe to re-run: check-by-reference before create).
+Seeding the demo org so the data tells a story: 3 realistic consulting clients, 6 months of time-billed ACCREC invoices (line items like "Consulting — 6 hrs @ £150" so billing-profile inference has real material), 1 accepted quote never invoiced, 1 retainer client whose monthly invoices stop 2 months ago, 1 billable expense assigned to a client but never recharged. Idempotent (check-by-reference before create). Companion doc: the June Google Calendar events to create by hand (23 client meetings, 6 deliberately uncovered), with exact titles/attendees that exercise the matcher.
 
 ## Step 3 — prove it
 
