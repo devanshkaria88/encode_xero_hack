@@ -1,0 +1,24 @@
+{
+  "name": "robyn",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Robyn — turns your calendar, contracts and transcripts into invoices in Xero.",
+  "workspaces": [
+    "api",
+    "web"
+  ],
+  "scripts": {
+    "db:up": "docker compose up -d db",
+    "db:down": "docker compose down",
+    "dev": "concurrently -n api,web -c blue,magenta \"pnpm --filter robyn-api dev\" \"pnpm --filter robyn-web dev\"",
+    "dev:api": "pnpm --filter robyn-api dev",
+    "dev:web": "pnpm --filter robyn-web dev",
+    "seed": "pnpm --filter robyn-api seed",
+    "openapi": "pnpm --filter robyn-api openapi && pnpm --filter robyn-web gen:types",
+    "build": "pnpm --filter robyn-api build && pnpm --filter robyn-web build"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0"
+  },
+  "packageManager": "pnpm@9.15.4"
+}

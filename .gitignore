@@ -8,3 +8,16 @@ build/
 *.log
 .env.backup
 .env.*.backup
+
+# api/.env holds real, irreplaceable Xero creds — NEVER commit it
+api/.env
+api/.env.*.backup
+
+# Next.js
+web/.next/
+web/out/
+web/next-env.d.ts
+
+# local runtime artifacts
+seed/.artifacts/
+*.tsbuildinfo
