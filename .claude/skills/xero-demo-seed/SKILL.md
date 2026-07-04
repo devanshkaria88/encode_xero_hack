@@ -244,5 +244,5 @@ Sources (fact-check trail):
 - .tmp/xero-refs/xero-mcp-server/src/handlers — grepped 2026-07-04: zero PurchaseOrder handlers → POs are raw-API only.
 - GET /Organisation requires accounting.settings[.read] (why preflight uses GET /connections instead): OpenAPI spec /Organisation security block; .claude/skills/xero-auth/SKILL.md + scripts/verify-auth.ts (same connections route).
 - Tolerance ±2%/£5, match-state names (MATCHED / MISSING_RECEIPT / AMOUNT_MISMATCH / QTY_MISMATCH / MISSING_PO), line-level qty×price check, and PO-ref extraction from line text at the edges: context/architecture.md (project truth, not a Xero fact).
-- Auto-uppercase of references: searched all fact sheets and cloned repos 2026-07-04 — no evidence either way; left UNVERIFIED.
+- Auto-uppercase of references: searched all fact sheets and cloned repos 2026-07-04 — no evidence either way; left UNVERIFIED — check before relying.
 -->
