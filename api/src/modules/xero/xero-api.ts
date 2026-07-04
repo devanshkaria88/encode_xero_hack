@@ -5,7 +5,19 @@
 // Idempotency discipline: every write does check-by-reference first. ACCREC
 // invoices carry a unique-ish Reference we own, so we filter on it before create.
 
-import { xeroFetch, xeroRequest, Pagination, resolveTenant } from './xero-http';
+import { xeroFetch, xeroRequest, assertElementOk, Pagination, resolveTenant } from './xero-http';
+
+// ---- Date helpers (YYYY-MM-DD in UTC) -------------------------------------
+
+function todayISO(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function addDaysISO(dateISO: string, days: number): string {
+  const d = new Date(`${dateISO}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
 
 // ---- Contacts -------------------------------------------------------------
 
@@ -125,6 +137,11 @@ export async function createInvoice(
   const existing = await findInvoiceByReference(input.reference);
   if (existing) return { invoice: existing, created: false };
 
+  // Xero rejects an AUTHORISED create with no DueDate; default to Net 14 from
+  // the invoice date so both DRAFT and AUTHORISED writes always validate.
+  const date = input.date ?? todayISO();
+  const dueDate = input.dueDate ?? addDaysISO(date, 14);
+
   const payload: XeroInvoice = {
     Type: 'ACCREC',
     Contact: { ContactID: input.contactId },
@@ -132,18 +149,31 @@ export async function createInvoice(
     LineItems: input.lineItems,
     LineAmountTypes: input.lineAmountTypes ?? 'Exclusive',
     Status: input.status ?? 'DRAFT',
-    ...(input.date ? { Date: input.date } : {}),
-    ...(input.dueDate ? { DueDate: input.dueDate } : {}),
+    Date: date,
+    DueDate: dueDate,
     ...(input.currencyCode ? { CurrencyCode: input.currencyCode } : {}),
   };
 
-  const res = await xeroFetch<{ Invoices: XeroInvoice[] }>('/Invoices', {
-    method: 'POST',
-    json: { Invoices: [payload] },
-    query: { summarizeErrors: 'false' },
-    idempotencyKey: `invoice:${input.reference}`.slice(0, 128),
-  });
-  return { invoice: res.Invoices[0], created: true };
+  const res = await xeroFetch<{
+    Invoices: (XeroInvoice & {
+      StatusAttributeString?: 'OK' | 'WARNING' | 'ERROR';
+      ValidationErrors?: { Message?: string }[];
+    })[];
+  }>(
+    '/Invoices',
+    {
+      method: 'POST',
+      json: { Invoices: [payload] },
+      query: { summarizeErrors: 'false' },
+      idempotencyKey: `invoice:${input.reference}`.slice(0, 128),
+    },
+  );
+  // summarizeErrors=false hides validation failures inside a 200 — assert the
+  // element status so a bad write throws instead of returning a zero-GUID.
+  const element = res.Invoices?.[0];
+  if (!element) throw new Error('XeroInvoiceCreateFailed: no invoice element in response');
+  assertElementOk(element, `create ACCREC invoice ${input.reference}`);
+  return { invoice: element, created: true };
 }
 
 /** Move a DRAFT/SUBMITTED invoice to AUTHORISED (raw API — MCP cannot). */

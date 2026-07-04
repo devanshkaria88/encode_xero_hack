@@ -24,7 +24,11 @@ const GRANULAR_SCOPES = [
   'accounting.attachments',
   'accounting.settings.read',
   'accounting.payments',
-  'accounting.reports.read',
+  // A granular-only Custom Connection has the specific report scopes, NOT the
+  // broad accounting.reports.read. Request the ones this project reads.
+  'accounting.reports.aged.read',
+  'accounting.reports.profitandloss.read',
+  'accounting.reports.balancesheet.read',
 ].join(' ');
 
 let dotEnvLoaded = false;
@@ -110,11 +114,15 @@ async function requestToken(scope: string): Promise<Response> {
 /** Mint a token, discovering the scope string the app actually grants. */
 async function mintToken(): Promise<string> {
   const override = process.env.XERO_SCOPES?.trim();
-  const chain = workingScopeString
-    ? [workingScopeString]
-    : override
-      ? [override]
-      : [BROAD_SCOPES, GRANULAR_SCOPES];
+  const chain =
+    workingScopeString !== null
+      ? [workingScopeString] // reuse the scope string we already know works ('' is valid)
+      : override
+        ? [override]
+        : // Broad first; granular for post-Apr-2026 CCs; finally an empty scope,
+          // which makes Xero grant exactly the scopes the app has (works for any
+          // real Custom Connection).
+          [BROAD_SCOPES, GRANULAR_SCOPES, ''];
 
   let lastBody = '';
   for (const scope of chain) {

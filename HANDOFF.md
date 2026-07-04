@@ -5,11 +5,15 @@ Backend (NestJS, `api/`) + frontend (Next.js, `web/`) + demo seed (`seed/`).
 
 ---
 
-## 🔴 DO THIS FIRST — fix the Xero credentials (blocks the money moment)
+## ✅ Xero is LIVE (creds fixed)
 
-The `api/.env` credentials are **a standard OAuth2 app, not a Custom Connection**. Verified live: via `client_credentials` every accounting scope is filtered out ("no valid scopes remaining after filtering for grant type"), `GET /connections` 400s with no tenant, and `/Invoices` 403s. There is **no unattended workaround** — the app type is fixed at creation and only you can fix it in the portal.
+The Xero Custom Connection is connected to **Demo Company (UK)** and the whole money moment is verified live: approving a proposal wrote **INV-0068** (ACCREC, AUTHORISED, £450, Net 14) with Robyn's decision note in History and two evidence attachments (contract clause + transcript excerpt). The Connections panel shows XERO as LIVE. `pnpm --filter robyn-api verify:xero` prints `G0 PASS`.
 
-**Fix (~5 minutes, one-time):**
+If you ever need to re-point Xero at a different org, the original setup steps are below.
+
+<details><summary>How the Custom Connection was set up (for reference / re-doing)</summary>
+
+The first creds were a standard OAuth2 app (client_credentials filtered out every accounting scope, `/connections` 400'd). The fix was a **fresh Custom Connection**:
 1. Go to <https://developer.xero.com/> → **My Apps** → **New app** → choose **Custom Connection** (you cannot convert the existing standard app — it must be a fresh Custom Connection app).
 2. Name it (e.g. "Robyn"). For the authorising user, use yourself.
 3. **Scopes** — select the accounting scopes. Either the broad set (`accounting.transactions`, `accounting.contacts`, `accounting.attachments`, `accounting.settings`, `accounting.reports.read`) or, if the picker only offers granular scopes, select: `accounting.invoices`, `accounting.contacts`, `accounting.attachments`, `accounting.settings.read`, `accounting.payments`, `accounting.reports.read`. (Robyn's token module tries broad first, then falls back to granular automatically.)
@@ -20,7 +24,9 @@ The `api/.env` credentials are **a standard OAuth2 app, not a Custom Connection*
 
 Once `G0 PASS`, every Xero path in Robyn goes live automatically (contact create, ACCREC invoice draft/authorise, History note, Attachment, Payments read). Then run the Xero seed: `pnpm --filter robyn-api seed`.
 
-If the picker won't grant a scope the fallback expects, set `XERO_SCOPES=` in `api/.env` to the *exact* space-separated scopes the app was granted, and re-run verify.
+If the picker won't grant a scope the fallback expects, set `XERO_SCOPES=` in `api/.env` to the *exact* space-separated scopes the app was granted, and re-run verify. (This app is granular-only; the token module requests broad, then the granular set, then an empty scope which grants exactly what the app has.)
+
+</details>
 
 ---
 
@@ -57,23 +63,23 @@ pnpm dev         # api on :4000 (docs /api/docs), web on :3000
 Start clean: `pnpm --filter robyn-api seed` then `pnpm dev`, open <http://localhost:3000>. The cold open shows **3 tasks** and the leak strip **"£2,880 recoverable in June 2026"**.
 
 1. **Cold open on the Tasks inbox (20s).** Three cards waiting: a meeting missing its transcript, an agreement email to confirm, an invoice in review. "This is my back office now." Point at the leak strip.
-2. **Rule 1 live — transcript to invoice (70s).** On the *Provide transcript* card (Fenwick kitchen fit-out review), paste a Granola transcript that includes an extra ask (e.g. "can you also spec the utility room, that is new work"). Robyn matches the client, pulls the contract, and builds the proposal: **1.5h calendar block @ £150 cited to Clause 3.1 + the utility room 3h caught from the transcript with the verbatim quote = £810 inc. VAT**. Open *Show evidence*, then **Approve & send to Xero** (writes the invoice with a decision note + evidence attachment once Xero is live; until then it says "Xero connection pending, invoice ready to send").
-3. **Rule 2 live — email to client (50s).** The *Confirm agreement* card shows Priya Nair's verbatim "Let's go ahead." **Confirm and create client** → Priya becomes a client (Robyn creates the Xero contact when live) and Robyn asks for her contract. New client onboarded from a calendar event and an email, zero forms.
-4. **Auto-send + close (40s).** Open **Clients** → Halcyon Retail has autonomy **ON**: its monthly retainer invoice goes out on its own within contract terms (shown in Xero once live; the 5 auto-sent history invoices are on the card). Leak strip: "June: £2,880 was walking away." Map to the rubric: real problem + Xero depth (50%), Accounting/Payments API (30%), production-ready architecture — the Connections panel and audit trail (20%).
+2. **Rule 1 live — transcript to invoice (70s).** On the *Provide transcript* card (Fenwick kitchen fit-out review), paste a Granola transcript that includes an extra ask (e.g. "can you also spec the utility room, that is new work"). Robyn matches the client, pulls the contract, and builds the proposal: **1.5h calendar block @ £150 cited to Clause 3.1 + the utility room 3h caught from the transcript with the verbatim quote = £810 inc. VAT**. Open *Show evidence*, then **Approve & send to Xero** → the invoice is created live in Xero (AUTHORISED) with Robyn's decision note in History and the transcript + contract-clause attachments. Follow the Xero deep link to show it in the org.
+3. **Rule 2 live — email to client (50s).** The *Confirm agreement* card shows Priya Nair's verbatim "Let's go ahead." **Confirm and create client** → Robyn creates the Xero contact and onboards Priya, then asks for her contract. New client from a calendar event and an email, zero forms.
+4. **Auto-send + close (40s).** Open **Clients** → Halcyon Retail has autonomy **ON**: its monthly retainer invoice goes out on its own within contract terms (the 5 auto-sent history invoices are on the card, live in the org). Leak strip: "June: £2,880 was walking away." Map to the rubric: real problem + Xero depth (50%), Accounting/Payments API (30%), production-ready architecture — the Connections panel and audit trail (20%).
 
 Supporting surfaces to show if asked: **Calendar** (every block colour-coded by whether it's been paid for; click any event for its evidence chain), **Invoices** (every line's provenance chip + the "Money Robyn found" ledger detections), **Connections** (honest LIVE/FALLBACK/DOWN health).
 
 ## What is verified live vs via fallback
 
+- **Live now, verified end to end against Xero (Demo Company UK):** contact create, ACCREC invoice create + authorise, History decision note, evidence Attachments, Payments (Halcyon retainer cadence with the June gap), an accepted Quote, and aged receivables. Proof: approving a proposal wrote **INV-0068** with its note + 2 attachments. The seed mirrors the whole story into the org (3 contacts, 17 invoices, quote QU-0042, 5 payments).
 - **Live now:** the reconciliation engine (29 unit tests), Loop 1 transcript→invoice with the real Anthropic LLM, Loop 2 email agreement detection, Loop 3 detectors, the whole dashboard, all state transitions and the audit trail. Screenshots of every beat are in `docs/qa/`.
-- **Live the moment you fix the Xero creds** (top of this file): contact create, ACCREC invoice draft/authorise, History note, Attachment, Payments read, aged receivables. The code paths exist and are exercised; they currently catch the auth error and surface "Xero connection pending" instead of writing. Run `pnpm --filter robyn-api verify:xero` to confirm, then `pnpm --filter robyn-api seed` to populate the Xero org.
 - **Fallback by design (no creds present):** calendar via the seeded `.ics`, email via the fixture mailbox. Both are shown honestly as FALLBACK on the Connections panel and swap to live when you add Google/IMAP creds.
 
 ## Three things to check first when you land
 
-1. **Fix the Xero Custom Connection** (top of this file) and run `pnpm --filter robyn-api verify:xero` until it prints `G0 PASS`, then `pnpm --filter robyn-api seed`. This turns every "Xero connection pending" into a real write.
-2. **Walk the demo runbook once** against your own machine to get the timing, especially pasting your own Granola transcript in beat 2.
-3. **Skim the Connections panel** — it is the judges' production-readiness read; confirm it tells the truth about what is live vs demo data on your setup.
+1. **Confirm Xero is still live** — `pnpm --filter robyn-api verify:xero` should print `G0 PASS`; the Connections panel should show XERO **LIVE / Demo Company (UK)**. (Custom Connection tokens don't expire the connection; if it ever drops, the fix steps are in the collapsed section above.)
+2. **Walk the demo runbook once** against your own machine to get the timing, especially pasting your own Granola transcript in beat 2, and click through to the real invoice in Xero at the end.
+3. **Skim the Connections panel** — it is the judges' production-readiness read; it tells the truth (Xero LIVE, calendar + email on demo data until you add those creds).
 
 ## Known rough edges
 
