@@ -583,10 +583,19 @@ function buildSeed() {
       emails: j(['priya.nair88@gmail.com']),
       displayName: 'Priya Nair',
       firstSeenMeetingId: mPriya,
-      state: 'QUEUED',
-      evidence: null,
+      // Pre-detected so the cold-open is self-contained: the seeded fixture
+      // email already contains the go-ahead. A live POST /email/poll is
+      // idempotent and just refreshes lastPolledAt (evidence matches the poll).
+      state: 'AGREEMENT_DETECTED',
+      evidence: j({
+        email_msg_id: '<priya-goahead-0630@mail.gmail.com>',
+        quote: "Let's go ahead.",
+        from: 'priya.nair88@gmail.com',
+        subject: 'Re: Working together',
+        received_at: '2026-06-30T09:12:00.000Z',
+      }),
       promotedClientId: null,
-      lastPolledAt: null,
+      lastPolledAt: plusMinutes(-5),
     },
   ];
 
@@ -678,6 +687,8 @@ function buildSeed() {
         emails: ['priya.nair88@gmail.com'],
         firstSeenMeeting: 'Discovery call - Priya Nair',
         watching: true,
+        evidenceQuote: "Let's go ahead.",
+        evidenceFrom: 'priya.nair88@gmail.com',
         action: { method: 'POST', path: `/potential-clients/${priyaId}/confirm` },
       }),
       resolution: null,

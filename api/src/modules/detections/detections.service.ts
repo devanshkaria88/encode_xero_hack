@@ -387,6 +387,22 @@ export class DetectionsService {
         skipped += 1;
         continue;
       }
+      // Semantic guard: never open a second active detection of the same type
+      // for the same client (e.g. one "retainer stopped" per client at a time).
+      // This keeps re-runs idempotent even against seed rows whose dedupeKey
+      // was minted differently. Detections with no client fall back to the key.
+      if (c.clientId) {
+        const active = await this.detections.findOne({
+          where: [
+            { type: c.type, clientId: c.clientId, state: DetectionState.OPEN },
+            { type: c.type, clientId: c.clientId, state: DetectionState.PROPOSED },
+          ],
+        });
+        if (active) {
+          skipped += 1;
+          continue;
+        }
+      }
       const row = this.detections.create({
         type: c.type,
         clientId: c.clientId,
