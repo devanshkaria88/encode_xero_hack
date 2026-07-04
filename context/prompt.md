@@ -1,54 +1,43 @@
-# PROMPT — generate the Xero skills for this project
+# PROMPT — build Robyn end to end, unattended
 
-Paste everything below this line into Claude Code as the first task of the build.
+Paste everything below into the remote agent. It runs without Devansh available: no questions, no pauses, decisions get made and logged.
 
 ---
 
-Read `context/context.md` and `context/architecture.md` first. Then build project-local skills that encode everything this project needs to know about talking to Xero, so that neither you nor Cursor ever has to rediscover Xero facts mid-build.
+/goal Full end-to-end Robyn: every gate in `context/architecture.md` met, every surface tested through Chrome DevTools MCP, pushed to origin. Do not stop before that. Do not wait for a human at any point.
 
-## Step 1 — pull the source material
+## Ground rules
 
-Clone shallow into `.tmp/xero-refs/` (gitignored):
+1. Read `context/context.md`, `context/architecture.md`, and `CLAUDE.md` first. They are law. The Xero skills already exist in `.claude/skills/` (G0 committed) — use them, don't regenerate them.
+2. You are unattended. When something is ambiguous, make the smallest reasonable decision, record it under `## Decisions` in `context/last_update.md`, and keep moving. Never leave a TODO where a decision would do.
+3. Missing credential protocol: if an external credential is absent from `api/.env` (Google OAuth, IMAP password, Anthropic key, Xero), build the integration anyway, verify it through its fallback path (.ics upload for calendar, a local fixture mailbox behind the same IMAP interface for email), and add a line to `HANDOFF.md` telling Devansh exactly what to paste where. Xero creds should already be present (G0 verified auth) — if they work, every Xero path must be verified live, no exceptions.
+4. Commit at every working state, message prefixed with the gate it serves. `git push origin main` at every gate boundary, not just at the end — a travelling founder must be able to pull a working repo at any moment.
+5. Follow the gate order G1 → G5 from `architecture.md`. The invariant from CLAUDE.md holds everywhere: every agent behaviour is a state transition that writes to Xero or raises a Task; the LLM parses and proposes, never decides, never sends.
 
-- https://github.com/XeroAPI/xero-mcp-server
-- https://github.com/XeroAPI/xero-agent-toolkit
-- https://github.com/XeroAPI/xero-prompt-library
-- https://github.com/XeroAPI/xero-command-line
+## Build
 
-Study before writing anything:
-- `xero-prompt-library/*/SKILL.md` — Xero's own skill-writing style, especially the Lovable ones. Their auth guidance is Lovable/Supabase-flavoured; DO NOT copy the runtime specifics, DO copy their discipline: pre-flight checks first, exact error → real cause tables, scope minimalism, token handling rules.
-- `xero-mcp-server/src/handlers/` — the definitive list of what MCP can and cannot do.
+Everything in `architecture.md`: the three loops, the domain model, the five dashboard surfaces (Tasks inbox, Calendar view, Clients, Invoices, Connections), the autonomy policy, the OpenAPI contract regime, seed scripts. Local runtime: Postgres via docker compose, `api` on :4000, `web` on :3000, one `make dev` (or `pnpm dev` at root) that brings the whole thing up. Seed data per G0 spec so the app is demo-rich on first boot.
 
-## Step 2 — write these skills into `.claude/skills/`
+## Test — Chrome DevTools MCP, and only trust what you clicked
 
-Each skill: a directory with `SKILL.md`, frontmatter `name` + `description` (description states WHEN to trigger), runnable snippets in our stack (NestJS/TypeScript, xero-node SDK or plain fetch — pick one and be consistent), and a "traps" section. Terse and factual, no filler. If you cannot verify a fact from the cloned repos or official docs, mark it `UNVERIFIED — check before relying`.
+After G3 and again after G5, run the full QA pass with the Chrome DevTools MCP against the running app. Fix and re-run until the checklist is green — a failed check is a build task, not a note.
 
-### `xero-auth`
-Custom Connections (client_credentials): token endpoint, scopes we need (`accounting.transactions`, `accounting.contacts`, `accounting.attachments`, `accounting.reports.read`), token caching + refresh-on-401, the fact that custom connections are single-org so no `xero-tenant-id` juggling, and the pre-flight env assertions pattern (empty `client_id` surfaces as `unauthorized_client` — fail fast with a clear message, exactly like the official Lovable skill does). Include a `verify-auth.ts` snippet that lists 1 invoice and prints the org name — this is Gate G0.
+**Interaction sweep (every surface):**
+- Every clickable element: `cursor-pointer`, visible hover state, disabled state while its action is in flight. Click every button, tab, card, toggle, and command-bar action. A rendered control that does nothing is a P0 bug.
+- Resolve one task of each of the five types end to end from the Tasks inbox.
+- Calendar view: navigate weeks/months, click events in every state, confirm the side panel shows the correct evidence chain per state.
+- Clients: open every client, view a parsed contract clause, flip the autonomy toggle both ways, check the potential-clients rail.
+- Invoices: open a proposal, verify every line shows its provenance chip, follow the Xero deep link.
+- Connections: statuses render truthfully (live vs fallback), "check now" triggers the poll and the UI reflects it.
 
-### `xero-accounting-api`
-The endpoints this project touches, with request/response shapes trimmed to fields we use:
-- Invoices type ACCREC (sales): list with where/order/page, line items and their descriptions/dates (billing-profile inference and coverage checks read these), create DRAFT invoices with provenance in line descriptions.
-- Quotes: list, statuses (SENT/ACCEPTED/INVOICED), the link (or absence of one) between an accepted quote and a subsequent invoice.
-- Payments: list per contact, dates and amounts (retainer-cadence detection feeds on this).
-- Billable expenses / expense claims assigned to customers, and how to tell whether they ever appeared on an ACCREC invoice.
-- Attachments: upload onto an invoice (raw bytes PUT, content-type, filename rules, 25MB cap) — transcript-excerpt evidence lands here.
-- History/Notes: append the agent's decision note to any document.
-- Contacts: list + matching-relevant fields (Name, EmailAddress), create.
-- Reports: aged receivables by contact.
-Pagination (100/page), `If-Modified-Since`, `where` filter syntax and its quoting traps, validation error envelope shape (`Elements[].ValidationErrors`), and rate limits (60/min, 5,000/day per tenant; 429 handling with `Retry-After`).
+**Health sweep (every route):**
+- Zero console errors and zero failed network requests on every route, verified via DevTools console and network panels.
+- Loading, empty, and error states actually render: throttle the network in DevTools and reload each surface; kill the API and confirm error states appear instead of blank screens.
+- Layout at 1440 and 1280 widths (stage laptop): no overflow, no clipped controls. Focus states visible on keyboard tab-through.
 
-### `xero-payments`
-Reading Payments effectively (per-contact history, dates, amounts, linkage to invoices) for cadence detection, and creating a Payment against an AUTHORISED ACCREC invoice for the paid-tracking stretch: required fields (Invoice, Account with `EnablePaymentsToAccount` or bank account code, Date, Amount), common rejection causes. Payments data is named in the Track 3 brief — the read path is the judged moment here.
+**Demo rehearsal (the real acceptance test):**
+Script the four demo beats from `context.md` as an end-to-end run against live services (or documented fallbacks): tasks inbox cold open → transcript task through to invoice in Xero → potential-client promotion via the agreement email → auto-send retainer + leak strip. Save a screenshot per beat to `docs/qa/`, plus one of the resulting invoice inside Xero. If any beat cannot complete, the build is not done.
 
-### `xero-mcp-usage`
-When to use the MCP server vs raw API in THIS project (table from `architecture.md`), how to run the MCP server locally against our custom connection env vars, and the tool-name → handler mapping for the ~10 tools we actually use. Note explicitly: no PO tools, no attachment tools — those route to `xero-accounting-api`.
+## Finish line
 
-### `xero-demo-seed`
-Seeding the demo org so the data tells a story: 3 realistic consulting clients, 6 months of time-billed ACCREC invoices (line items like "Consulting — 6 hrs @ £150" so billing-profile inference has real material), 1 accepted quote never invoiced, 1 retainer client whose monthly invoices stop 2 months ago, 1 billable expense assigned to a client but never recharged. Idempotent (check-by-reference before create). Companion doc: the June Google Calendar events to create by hand (23 client meetings, 6 deliberately uncovered), with exact titles/attendees that exercise the matcher.
-
-## Step 3 — prove it
-
-Run the `verify-auth.ts` snippet against the real demo org. Then delete nothing, commit `.claude/skills/` and append what you did to `context/last_update.md` per the collaboration protocol.
-
-Hard rules while doing all of this: no business logic in skills (skills are facts + snippets, decisions live in `api/src/modules/`), no UNVERIFIED fact used in Gate-critical paths, and every snippet compiles under our tsconfig.
+Done means, in order: G1–G5 checked off, both QA sweeps green with screenshots in `docs/qa/`, `HANDOFF.md` written (how to run, what credentials Devansh must add, the demo runbook step by step, known rough edges), `context/last_update.md` updated with the decision log, everything committed, `git push origin main`, and a final tag `v0-robyn-e2e`. Print a closing summary of what was built, what was verified live vs via fallback, and the three things Devansh should check first when he lands.
