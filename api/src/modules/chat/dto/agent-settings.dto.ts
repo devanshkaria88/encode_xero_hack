@@ -104,6 +104,7 @@ export class McpServerInputDto {
   @ApiPropertyOptional({
     description:
       'Bearer token for the server. Omit or send "" to keep the stored token; send null to clear it. Never returned in responses.',
+    type: String,
     nullable: true,
   })
   @IsOptional()

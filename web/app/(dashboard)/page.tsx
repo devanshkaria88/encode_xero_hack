@@ -1,12 +1,15 @@
 import type { Metadata } from "next";
 
-import { TasksSurface } from "./tasks/_components/tasks-surface";
+import { HomeSurface } from "./tasks/_components/home-surface";
 
 export const metadata: Metadata = {
-  title: "Tasks inbox",
+  title: "Dashboard",
 };
 
-/** Home. The demo opens here: everything Robyn needs a human for. */
+/**
+ * Home. The demo opens here: headline stats, the money charts board, and the
+ * compact inbox of everything Robyn needs a human for.
+ */
 export default function HomePage() {
-  return <TasksSurface />;
+  return <HomeSurface />;
 }

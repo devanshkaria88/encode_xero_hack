@@ -2049,7 +2049,7 @@ export interface components {
             /** @description Streamable-HTTP MCP endpoint URL (http/https). */
             url: string;
             /** @description Bearer token for the server. Omit or send "" to keep the stored token; send null to clear it. Never returned in responses. */
-            authToken?: Record<string, never> | null;
+            authToken?: string | null;
             /** @description Whether the chat agent may use this server. */
             enabled: boolean;
         };

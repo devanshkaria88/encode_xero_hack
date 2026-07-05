@@ -4587,7 +4587,7 @@
             "description": "Streamable-HTTP MCP endpoint URL (http/https)."
           },
           "authToken": {
-            "type": "object",
+            "type": "string",
             "description": "Bearer token for the server. Omit or send \"\" to keep the stored token; send null to clear it. Never returned in responses.",
             "nullable": true
           },

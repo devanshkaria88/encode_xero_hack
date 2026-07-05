@@ -126,6 +126,88 @@ export function patch<T>(
   return request<T>("PATCH", path, body, init);
 }
 
+export function del<T>(path: string, init?: RequestInit): Promise<T> {
+  return request<T>("DELETE", path, undefined, init);
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Chat SSE — POST /chat streams events as `data: {...}` lines.               */
+/* -------------------------------------------------------------------------- */
+
+export type ChatStreamEvent =
+  | { type: "text"; delta: string }
+  | { type: "tool"; name: string; status: "running" | "done" | "error" }
+  | { type: "done" }
+  | { type: "error"; message: string };
+
+/**
+ * Stream a chat turn. Calls `onEvent` per SSE event; resolves when the stream
+ * ends. Abort via the returned controller (e.g. user hits stop / unmount).
+ */
+export function streamChat(
+  messages: { role: "user" | "assistant"; content: string }[],
+  onEvent: (event: ChatStreamEvent) => void,
+): { done: Promise<void>; abort: () => void } {
+  const controller = new AbortController();
+
+  const done = (async () => {
+    let res: Response;
+    try {
+      res = await fetch(`${API_BASE}/chat`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messages }),
+        signal: controller.signal,
+        cache: "no-store",
+      });
+    } catch (err) {
+      if (controller.signal.aborted) return;
+      onEvent({
+        type: "error",
+        message: "Cannot reach Robyn's API. Check the connection and try again.",
+      });
+      return;
+    }
+    if (!res.ok || !res.body) {
+      onEvent({ type: "error", message: `Chat failed (${res.status})` });
+      return;
+    }
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    try {
+      for (;;) {
+        const { value, done: finished } = await reader.read();
+        if (finished) break;
+        buffer += decoder.decode(value, { stream: true });
+        // SSE events are separated by a blank line; each line we care about
+        // starts with "data: ".
+        const chunks = buffer.split("\n\n");
+        buffer = chunks.pop() ?? "";
+        for (const chunk of chunks) {
+          for (const line of chunk.split("\n")) {
+            if (!line.startsWith("data:")) continue;
+            const raw = line.slice(5).trim();
+            if (!raw) continue;
+            try {
+              onEvent(JSON.parse(raw) as ChatStreamEvent);
+            } catch {
+              // Malformed frame — skip rather than kill the stream.
+            }
+          }
+        }
+      }
+    } catch (err) {
+      if (!controller.signal.aborted) {
+        onEvent({ type: "error", message: "The chat stream was interrupted." });
+      }
+    }
+  })();
+
+  return { done, abort: () => controller.abort() };
+}
+
 /* -------------------------------------------------------------------------- */
 /*  Data hooks — native fetch with loading / error / refetch, no extra deps.    */
 /* -------------------------------------------------------------------------- */

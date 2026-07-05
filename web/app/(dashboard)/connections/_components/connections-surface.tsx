@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { Plug, RotateCw } from "lucide-react";
+import { toast } from "sonner";
 
 import { useApi, type Schemas } from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -14,6 +15,7 @@ import { cn } from "@/lib/utils";
 import { ConnectionCard } from "./connection-card";
 
 type Row = Schemas["ConnectionRowDto"];
+type GoogleStatus = Schemas["GoogleStatusDto"];
 
 /** Canonical top-to-bottom order, independent of API ordering. */
 const ORDER: Row["kind"][] = ["XERO", "CALENDAR", "EMAIL"];
@@ -28,6 +30,77 @@ export function ConnectionsSurface() {
     "/connections",
     { refreshMs: 60_000 },
   );
+
+  // One Google status shared by the Calendar and Email cards.
+  const google = useApi<GoogleStatus>("/google/status");
+  const googleRefetch = google.refetch;
+
+  // While the post-connect sync runs, poll status so the cards flip to
+  // "connected + synced" without a manual refresh.
+  const syncStatus = google.data?.syncStatus;
+  React.useEffect(() => {
+    if (syncStatus !== "SYNCING" && syncStatus !== "PENDING") return;
+    const id = setInterval(() => googleRefetch(), 4_000);
+    return () => clearInterval(id);
+  }, [syncStatus, googleRefetch]);
+
+  // Handle the OAuth return redirect: ?google=connected | ?google=error&reason=...
+  // Toast once, clear the query params, refetch everything. The root <Toaster>
+  // hydrates in its own task, and a toast fired before it subscribes is
+  // silently dropped, so the toast retries until it actually shows. The
+  // outcome lives in a ref so the URL is only read and cleaned once.
+  const redirectOutcome = React.useRef<{
+    outcome: string;
+    reason: string | null;
+  } | null>(null);
+  React.useEffect(() => {
+    if (!redirectOutcome.current) {
+      const params = new URLSearchParams(window.location.search);
+      const outcome = params.get("google");
+      if (!outcome) return;
+      redirectOutcome.current = { outcome, reason: params.get("reason") };
+      params.delete("google");
+      params.delete("reason");
+      const qs = params.toString();
+      window.history.replaceState(
+        null,
+        "",
+        window.location.pathname + (qs ? `?${qs}` : ""),
+      );
+      refetch();
+      googleRefetch();
+    }
+
+    const pending = redirectOutcome.current;
+    if (!pending) return;
+    let cancelled = false;
+    let attemptsLeft = 12;
+    const fire = () => {
+      if (cancelled) return;
+      if (pending.outcome === "connected") {
+        toast.success("Google connected", {
+          description: "Robyn is running the first sync now.",
+        });
+      } else if (pending.outcome === "error") {
+        toast.error("Google connection failed", {
+          description: pending.reason || "Please try connecting again.",
+        });
+      }
+      window.setTimeout(() => {
+        if (cancelled) return;
+        if (document.querySelector("[data-sonner-toast]")) {
+          redirectOutcome.current = null;
+          return;
+        }
+        if (attemptsLeft-- > 0) fire();
+      }, 300);
+    };
+    fire();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const rows = React.useMemo(() => {
     if (!data) return [];
@@ -80,7 +153,15 @@ export function ConnectionsSurface() {
       ) : (
         <div className="space-y-4">
           {rows.map((row) => (
-            <ConnectionCard key={row.kind} row={row} onChanged={refetch} />
+            <ConnectionCard
+              key={row.kind}
+              row={row}
+              onChanged={refetch}
+              googleStatus={google.data}
+              googleStatusLoading={google.isLoading}
+              googleStatusError={google.error}
+              onGoogleStatusRefresh={googleRefetch}
+            />
           ))}
         </div>
       )}

@@ -14,7 +14,7 @@ import type { LucideIcon } from "lucide-react";
 import { toast } from "sonner";
 
 import { cn } from "@/lib/utils";
-import { post, useAction, type Schemas } from "@/lib/api";
+import { post, useAction, type ApiError, type Schemas } from "@/lib/api";
 import { connectionStatusMeta } from "@/lib/states";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -22,8 +22,10 @@ import { StateBadge } from "@/components/state-badge";
 import { RelativeTime } from "@/components/relative-time";
 
 import { IcsImport } from "./ics-import";
+import { GoogleConnect } from "./google-connect";
 
 type Row = Schemas["ConnectionRowDto"];
+type GoogleStatus = Schemas["GoogleStatusDto"];
 
 const KIND: Record<
   Row["kind"],
@@ -89,9 +91,17 @@ function xeroReason(row: Row): string {
 export function ConnectionCard({
   row,
   onChanged,
+  googleStatus,
+  googleStatusLoading = false,
+  googleStatusError,
+  onGoogleStatusRefresh = () => {},
 }: {
   row: Row;
   onChanged: () => void;
+  googleStatus?: GoogleStatus;
+  googleStatusLoading?: boolean;
+  googleStatusError?: ApiError;
+  onGoogleStatusRefresh?: () => void;
 }) {
   const meta = KIND[row.kind] ?? {
     name: row.label || row.kind,
@@ -228,6 +238,20 @@ export function ConnectionCard({
             press Check now. Until then Robyn keeps every invoice ready to send
             and writes nothing to your books.
           </p>
+        </div>
+      )}
+
+      {/* Google account block: connect, or manage the connected account. */}
+      {(row.kind === "CALENDAR" || row.kind === "EMAIL") && (
+        <div className="mt-4 border-t border-border pt-4">
+          <GoogleConnect
+            kind={row.kind}
+            status={googleStatus}
+            statusLoading={googleStatusLoading}
+            statusError={googleStatusError}
+            onStatusRefresh={onGoogleStatusRefresh}
+            onChanged={onChanged}
+          />
         </div>
       )}
 

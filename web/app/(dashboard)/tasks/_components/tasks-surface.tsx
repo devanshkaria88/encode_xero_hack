@@ -7,17 +7,17 @@ import { useApi, type Schemas } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
-import { LoadingState } from "@/components/loading-state";
 import { ErrorState } from "@/components/error-state";
 import { EmptyState } from "@/components/empty-state";
 import { SummaryRow } from "./summary-row";
-import { TaskList } from "./task-list";
+import { TaskTileBoard, TileGridSkeleton } from "./task-tile-board";
 import type { TaskDto } from "./context";
 
 /**
- * The Tasks inbox — Robyn's home screen and primary resolution surface. Reads
- * GET /tasks and GET /dashboard/summary, and refetches both after every
- * resolution so a resolved card leaves and the headline numbers update at once.
+ * The Tasks inbox at /tasks — the primary resolution surface. Compact task
+ * tiles open the full resolution card in a dialog. Reads GET /tasks and
+ * GET /dashboard/summary, and refetches both after every resolution so a
+ * resolved tile leaves and the headline numbers update at once.
  */
 export function TasksSurface() {
   const tasksQ = useApi<TaskDto[]>("/tasks", { refreshMs: 20_000 });
@@ -74,7 +74,7 @@ export function TasksSurface() {
         </div>
 
         {tasksQ.isLoading ? (
-          <LoadingState rows={3} />
+          <TileGridSkeleton size="md" count={4} />
         ) : tasksQ.error ? (
           <ErrorState
             title="Couldn't load your tasks"
@@ -89,7 +89,7 @@ export function TasksSurface() {
             description="Robyn's watching your calendar, inbox and contracts. Anything that needs you will show up here."
           />
         ) : (
-          <TaskList tasks={tasks} refetchAll={refetchAll} />
+          <TaskTileBoard tasks={tasks} refetchAll={refetchAll} size="md" />
         )}
       </section>
     </div>
