@@ -61,7 +61,8 @@ export function loadConfig(): RobynConfig {
   const googleClientSecret = opt('GOOGLE_CLIENT_SECRET');
 
   cached = {
-    port: Number(opt('PORT', '4000')),
+    // 3000 mirrors the reference stack: the API owns :3000, the web app :3001.
+    port: Number(opt('PORT', '3000')),
     databaseUrl: req('DATABASE_URL'),
     anthropicApiKey: req('ANTHROPIC_API_KEY'),
     xero: {
@@ -80,11 +81,12 @@ export function loadConfig(): RobynConfig {
     google: {
       clientId: googleClientId,
       clientSecret: googleClientSecret,
-      // Default mirrors the URI already registered in Google Cloud Console for
-      // this client (the Next.js app forwards the callback to this API).
+      // Default mirrors the URI registered in Google Cloud Console for this
+      // client: a FRONTEND page (web app, :3001) that receives Google's
+      // redirect and hands the code to this API, which authorises the token.
       redirectUri: opt(
         'GOOGLE_REDIRECT_URI',
-        'http://localhost:3000/api/v1/calendar-providers/google/callback',
+        'http://localhost:3001/calendar/callback',
       ),
       configured: Boolean(googleClientId && googleClientSecret),
     },

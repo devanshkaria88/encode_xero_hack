@@ -10,7 +10,7 @@ import type { components, paths } from "./api-types";
 export type Schemas = components["schemas"];
 
 export const API_BASE =
-  process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:4000/api";
+  process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:3000/api";
 
 /** A failed HTTP call. Carries status + best-effort parsed body. */
 export class ApiError extends Error {

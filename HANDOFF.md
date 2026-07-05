@@ -15,16 +15,22 @@ a Settings section (system prompt, model, tools, skills); a reworked
 dashboard home (compact task tiles with dialogs + four chart cards from
 `GET /dashboard/charts`); light mode is the default.
 
+**Ports changed to mirror the reference stack: API on :3000, web on :3001.**
+The OAuth flow now matches myMan exactly: Google redirects to the frontend
+page `http://localhost:3001/calendar/callback` (the URI already registered
+for this client), the page hands the code to the API, and the API authorises
+the token server-side. Do not run the myMan backend at the same time — it
+also wants :3000.
+
 **Morning actions (10 minutes total):**
-1. **Google Cloud Console**: the OAuth client (the one myMan uses) does NOT
-   have our redirect URI registered — consent dead-ends at
-   `redirect_uri_mismatch`. Add
-   `http://localhost:3000/api/v1/calendar-providers/google/callback`
-   to its Authorised redirect URIs, then click "Connect Google" on
-   /connections and sign in. Gmail's `gmail.readonly` is a restricted scope:
-   expect an "unverified app" warning you can click through as a test user.
-   If Google refuses the gmail scope, calendar still goes live and email
-   stays on the honest fixture fallback.
+1. **Connect Google**: open http://localhost:3001/connections and click
+   "Connect Google". No Cloud Console changes should be needed now that the
+   registered frontend-callback URI is reused; if Google still shows
+   `redirect_uri_mismatch`, add `http://localhost:3001/calendar/callback` to
+   the client's Authorised redirect URIs and retry. Gmail's `gmail.readonly`
+   is a restricted scope: expect an "unverified app" warning you can click
+   through as a test user. If Google refuses the gmail scope, calendar still
+   goes live and email stays on the honest fixture fallback.
 2. **Xero daily budget**: the org's daily API limit was exhausted overnight
    (constant UI polling probed Xero uncached; both leaks are fixed with
    server-side caches). The window resets around 06:50 — charts and the
@@ -69,7 +75,7 @@ If the picker won't grant a scope the fallback expects, set `XERO_SCOPES=` in `a
 make db          # or: docker compose up -d db   (Postgres on :5432)
 pnpm install
 pnpm --filter robyn-api seed     # populates the demo (local always; Xero when creds are live)
-pnpm dev         # api on :4000 (docs /api/docs), web on :3000
+pnpm dev         # api on :3000 (docs /api/docs), web on :3001
 ```
 
 - API alone: `pnpm dev:api`  ·  Web alone: `pnpm dev:web`
@@ -92,7 +98,7 @@ pnpm dev         # api on :4000 (docs /api/docs), web on :3000
 
 ## Demo runbook (3 minutes, verified end to end)
 
-Start clean: `pnpm --filter robyn-api seed` then `pnpm dev`, open <http://localhost:3000>. The cold open shows **3 tasks** and the leak strip **"£2,880 recoverable in June 2026"**.
+Start clean: `pnpm --filter robyn-api seed` then `pnpm dev`, open <http://localhost:3001>. The cold open shows **3 tasks** and the leak strip **"£2,880 recoverable in June 2026"**.
 
 1. **Cold open on the Tasks inbox (20s).** Three cards waiting: a meeting missing its transcript, an agreement email to confirm, an invoice in review. "This is my back office now." Point at the leak strip.
 2. **Rule 1 live — transcript to invoice (70s).** On the *Provide transcript* card (Fenwick kitchen fit-out review), paste a Granola transcript that includes an extra ask (e.g. "can you also spec the utility room, that is new work"). Robyn matches the client, pulls the contract, and builds the proposal: **1.5h calendar block @ £150 cited to Clause 3.1 + the utility room 3h caught from the transcript with the verbatim quote = £810 inc. VAT**. Open *Show evidence*, then **Approve & send to Xero** → the invoice is created live in Xero (AUTHORISED) with Robyn's decision note in History and the transcript + contract-clause attachments. Follow the Xero deep link to show it in the org.
