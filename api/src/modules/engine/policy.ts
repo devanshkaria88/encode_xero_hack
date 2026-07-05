@@ -12,9 +12,9 @@ export function policyDecision(input: PolicyInput): PolicyResult {
 
   if (!input.autonomyEnabled) {
     auto = false;
-    reasons.push('Autonomy is OFF for this client, so everything goes to review.');
+    reasons.push('Autonomy is off for this client, so everything goes to review.');
   } else {
-    reasons.push('Autonomy is ON for this client.');
+    reasons.push('Autonomy is on for this client.');
   }
 
   if (!input.hasContractOnFile) {

@@ -3,7 +3,7 @@
 import * as React from "react";
 import { CheckCircle2, RotateCw } from "lucide-react";
 
-import { useApi, type Schemas } from "@/lib/api";
+import { get, useApi, type Schemas } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
@@ -33,7 +33,12 @@ export function HomeSurface() {
   const refetchAll = React.useCallback(() => {
     tasksQ.refetch();
     summaryQ.refetch();
-    chartsQ.refetch();
+    // The charts payload is server-cached for 3 minutes (Xero budget). Warm
+    // it with fresh=true first so an approval moves the board in this beat,
+    // then refetch to pick up the rebuilt cache.
+    void get("/dashboard/charts?fresh=true")
+      .catch(() => undefined)
+      .then(() => chartsQ.refetch());
   }, [tasksQ.refetch, summaryQ.refetch, chartsQ.refetch]);
 
   const tasks = tasksQ.data ?? [];

@@ -174,10 +174,14 @@
  * bottom. On desktop, where the grid is the last thing on the page, this
  * swallows the dashboard shell's bottom padding (main pb-20 + wrapper pb-6)
  * so the page never grows a scrollbar of its own.
+ *
+ * !important because the page shells use space-y-6, whose sibling rule
+ * (.space-y-6 > :not([hidden]) ~ :not([hidden])) also sets margin-bottom
+ * at higher specificity than any single-class margin utility.
  */
 @media (min-width: 1024px) {
   .fill-viewport-page {
-    margin-bottom: -6rem;
+    margin-bottom: -6rem !important;
   }
 }
 

@@ -5,6 +5,38 @@ Backend (NestJS, `api/`) + frontend (Next.js, `web/`) + demo seed (`seed/`).
 
 ---
 
+## Overnight update (5 Jul)
+
+New since the first handoff: real Google OAuth (calendar + gmail) with a
+`/google` module and a 15-min sync cron; a Google-Calendar-style week view
+with a mini month; an agentic chat (floating bubble, streaming, 13 read-only
+tools over live Xero + local data, web search, user-added MCP servers);
+a Settings section (system prompt, model, tools, skills); a reworked
+dashboard home (compact task tiles with dialogs + four chart cards from
+`GET /dashboard/charts`); light mode is the default.
+
+**Morning actions (10 minutes total):**
+1. **Google Cloud Console**: the OAuth client (the one myMan uses) does NOT
+   have our redirect URI registered — consent dead-ends at
+   `redirect_uri_mismatch`. Add
+   `http://localhost:3000/api/v1/calendar-providers/google/callback`
+   to its Authorised redirect URIs, then click "Connect Google" on
+   /connections and sign in. Gmail's `gmail.readonly` is a restricted scope:
+   expect an "unverified app" warning you can click through as a test user.
+   If Google refuses the gmail scope, calendar still goes live and email
+   stays on the honest fixture fallback.
+2. **Xero daily budget**: the org's daily API limit was exhausted overnight
+   (constant UI polling probed Xero uncached; both leaks are fixed with
+   server-side caches). The window resets around 06:50 — charts and the
+   connections pill flip back from local-fallback/DOWN automatically. Watch
+   the `X-DayLimit-Remaining` response header; if it reads ~1,000 the app is
+   on the starter tier and rehearsals should keep spare budget for the demo.
+
+Chat, settings, charts, tiles, and calendar all work while Xero is
+rate-limited (honest fallbacks everywhere). Full QA screenshots: docs/qa/v2-*.
+
+---
+
 ## ✅ Xero is LIVE (creds fixed)
 
 The Xero Custom Connection is connected to **Demo Company (UK)** and the whole money moment is verified live: approving a proposal wrote **INV-0068** (ACCREC, AUTHORISED, £450, Net 14) with Robyn's decision note in History and two evidence attachments (contract clause + transcript excerpt). The Connections panel shows XERO as LIVE. `pnpm --filter robyn-api verify:xero` prints `G0 PASS`.

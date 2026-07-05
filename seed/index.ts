@@ -566,7 +566,7 @@ function buildSeed() {
     ],
     lines: [
       line('Snagging site visit', 1, 150, [
-        { kind: 'CALENDAR_BLOCK', label: 'Fri 27 Jun', detail: '1h on site', source_ref: 'robyn-fenwick-snagging-0627@robyn.dev' },
+        { kind: 'CALENDAR_BLOCK', label: 'Sat 27 Jun', detail: '1h on site', source_ref: 'robyn-fenwick-snagging-0627@robyn.dev' },
         { kind: 'CONTRACT_CLAUSE', label: 'Clause 3.1', detail: 'GBP 150 per hour', source_ref: fenwickContractId },
       ]),
       line('Extra scope - re-spec kitchen lighting circuit', 1.5, 150, [
