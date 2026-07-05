@@ -105,6 +105,8 @@ Watch what happens, with zero further clicks:
 
 If Xero is still rate limited the proposal drops to review with a task instead. Approve it once the Xero window resets; nothing is lost.
 
+One known wrinkle on the email step: the Demo Company org has returned a Xero-side 500 on the invoice email endpoint even with everything valid (AUTHORISED invoice, contact with an email address, correct request). The invoice itself is safely AUTHORISED either way, the failure is audited as xero.invoice.email_failed, and Robyn retries the email on its sync cycle (at most once per 45 minutes per invoice) until it lands. If it keeps failing on demo day, the honest audit trail IS the story, and the email can be sent from the Xero UI in one click.
+
 ## Step 6. Scenario B: paste the Northbeam transcript
 
 Open the Northbeam intro call meeting (it is the one with the unknown attendee) and paste this transcript:

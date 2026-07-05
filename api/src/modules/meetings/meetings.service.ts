@@ -1,6 +1,6 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { IsNull, Not, Repository } from 'typeorm';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as nodeIcal from 'node-ical';
@@ -429,11 +429,26 @@ export class MeetingsService {
     return this.buildDetail(m);
   }
 
+  // The 15-min cron, the UI "Sync now" button and the Google module can all
+  // call sync() at once. Two overlapping runs raced upsertMeetings into a
+  // unique-key crash on gcalEventId and double LLM processing, so concurrent
+  // callers share the single in-flight run instead.
+  private syncInFlight: Promise<SyncResultDto> | null = null;
+
   async sync(): Promise<SyncResultDto> {
+    if (this.syncInFlight) return this.syncInFlight;
+    this.syncInFlight = this.doSync().finally(() => {
+      this.syncInFlight = null;
+    });
+    return this.syncInFlight;
+  }
+
+  private async doSync(): Promise<SyncResultDto> {
     const ingest = await this.ingestCalendar();
     const { imported, updated } = await this.upsertMeetings(ingest.events, ingest.source);
     await this.upsertCalendarConnection(ingest.status, ingest.label, ingest.detail);
     const processed = await this.runEligible();
+    await this.retryUnsentInvoiceEmails();
     await this.audit.record({
       actor: AuditActor.ROBYN,
       action: 'calendar.synced',
@@ -612,9 +627,19 @@ export class MeetingsService {
             (cancelled ? `, ${cancelled} cancellation(s) applied.` : '.'),
         };
       } catch (e) {
-        const ics = this.ingestIcsFile();
-        ics.detail = `Google Calendar unavailable (${String(e).slice(0, 120)}). Using .ics fallback. ${ics.detail}`;
-        return ics;
+        // Live data only: with Google connected, a transient fetch failure
+        // must NOT fall back to the seeded .ics — that once refilled a
+        // freshly drained demo DB with fixture meetings. Import nothing,
+        // report DOWN honestly, and let the next cron retry.
+        return {
+          events: [],
+          source: 'google',
+          status: ConnectionStatus.DOWN,
+          label: 'Google Calendar',
+          detail:
+            `Google Calendar unreachable (${String(e).slice(0, 160)}). ` +
+            'Nothing was imported this run; the next sync retries.',
+        };
       }
     }
     return this.ingestIcsFile();
@@ -738,8 +763,7 @@ export class MeetingsService {
     for (const ev of events) {
       const durationHours = round2((ev.end.getTime() - ev.start.getTime()) / 3600000);
       const isPersonal = this.isPersonalMeeting(ev.attendees);
-      let m = await this.meetingRepo.findOne({ where: { gcalEventId: ev.gcalEventId } });
-      if (m) {
+      const applyEventFields = (m: Meeting): Meeting => {
         m.title = ev.title;
         m.start = ev.start;
         m.end = ev.end;
@@ -747,10 +771,14 @@ export class MeetingsService {
         m.attendees = ev.attendees;
         m.isPersonal = isPersonal;
         m.source = source;
-        await this.meetingRepo.save(m);
+        return m;
+      };
+      const existing = await this.meetingRepo.findOne({ where: { gcalEventId: ev.gcalEventId } });
+      if (existing) {
+        await this.meetingRepo.save(applyEventFields(existing));
         updated++;
       } else {
-        m = this.meetingRepo.create({
+        const fresh = this.meetingRepo.create({
           gcalEventId: ev.gcalEventId,
           title: ev.title,
           start: ev.start,
@@ -765,11 +793,64 @@ export class MeetingsService {
           matchProposals: null,
           skipReason: null,
         });
-        await this.meetingRepo.save(m);
-        imported++;
+        try {
+          await this.meetingRepo.save(fresh);
+          imported++;
+        } catch (e) {
+          // A concurrent sync inserted this gcalEventId between our findOne
+          // and save. The unique index held; fold ours into an update.
+          if (!isUniqueViolation(e)) throw e;
+          const winner = await this.meetingRepo.findOne({ where: { gcalEventId: ev.gcalEventId } });
+          if (!winner) throw e;
+          await this.meetingRepo.save(applyEventFields(winner));
+          updated++;
+        }
       }
     }
     return { imported, updated };
+  }
+
+  /**
+   * Self-heal for the last link of the auto-send chain: an invoice that is
+   * AUTHORISED in Xero but whose email step failed (Xero 500s occasionally,
+   * and the Demo Company org appears unable to send at all) is retried until
+   * it lands. emailInvoiceViaXero already guards double-sends via emailedAt
+   * and audits every outcome, so retries are throttled to one per proposal
+   * per RETRY_EMAIL_EVERY_MS to keep the audit trail readable while the
+   * failure persists. In-memory on purpose: a restart just retries sooner.
+   */
+  private static readonly RETRY_EMAIL_EVERY_MS = 45 * 60 * 1000;
+  private readonly emailRetryLastAttempt = new Map<string, number>();
+
+  private async retryUnsentInvoiceEmails(): Promise<void> {
+    const pending = await this.proposalRepo.find({
+      where: {
+        state: InvoiceProposalState.SENT,
+        emailedAt: IsNull(),
+        xeroInvoiceId: Not(IsNull()),
+      },
+      take: 5,
+    });
+    for (const proposal of pending) {
+      const last = this.emailRetryLastAttempt.get(proposal.id) ?? 0;
+      if (Date.now() - last < MeetingsService.RETRY_EMAIL_EVERY_MS) continue;
+      this.emailRetryLastAttempt.set(proposal.id, Date.now());
+      try {
+        const client = await this.clientRepo.findOne({ where: { id: proposal.clientId } });
+        const clientEmail = client?.emails?.[0];
+        // No address on file: the original send already audited email_skipped;
+        // re-auditing every 15 minutes would just flood the trail.
+        if (!clientEmail) continue;
+        await this.emailInvoiceViaXero(
+          proposal,
+          clientEmail,
+          proposal.xeroInvoiceId as string,
+          proposal.xeroInvoiceNumber ?? (proposal.xeroInvoiceId as string),
+        );
+      } catch (e) {
+        this.log.warn(`Invoice email retry failed for ${proposal.id}: ${String(e).slice(0, 160)}`);
+      }
+    }
   }
 
   private isPersonalMeeting(attendees: MeetingAttendee[]): boolean {
@@ -1199,6 +1280,15 @@ export class MeetingsService {
       xeroError: outcome.xeroError,
     };
   }
+}
+
+// Postgres unique_violation, surfaced by TypeORM as QueryFailedError with the
+// driver code preserved. Anything else must keep propagating.
+function isUniqueViolation(e: unknown): boolean {
+  const code =
+    (e as { driverError?: { code?: string } })?.driverError?.code ??
+    (e as { code?: string })?.code;
+  return code === '23505';
 }
 
 function round2(n: number): number {

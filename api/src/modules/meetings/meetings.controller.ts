@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, Param, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Logger, Param, Post, Query } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import {
   ApiOkResponse,
@@ -26,6 +26,8 @@ import {
 @ApiTags('meetings')
 @Controller('meetings')
 export class MeetingsController {
+  private readonly log = new Logger('MeetingsCron');
+
   constructor(private readonly meetings: MeetingsService) {}
 
   @Get()
@@ -114,6 +116,13 @@ export class MeetingsController {
   @Cron('0 */15 * * * *')
   async calendarSync(): Promise<void> {
     if (!isServing()) return; // never fire during the OpenAPI export
-    await this.meetings.sync();
+    try {
+      await this.meetings.sync();
+    } catch (e) {
+      // A failed scheduled sync is a warning, not an unhandled Scheduler
+      // stack trace — the next run retries and manual sync still surfaces
+      // the full error to the caller.
+      this.log.warn(`Scheduled calendar sync failed: ${String(e).slice(0, 300)}`);
+    }
   }
 }

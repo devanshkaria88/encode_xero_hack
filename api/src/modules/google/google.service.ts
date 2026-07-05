@@ -146,9 +146,13 @@ export class GoogleService {
         calendar.imported = res.imported;
         calendar.updated = res.updated;
         calendar.processed = res.processed;
-        calendar.synced = res.source === 'google';
+        calendar.synced = res.source === 'google' && res.status !== ConnectionStatus.DOWN;
         if (res.source !== 'google') {
           errors.push(`Calendar fell back to ${res.source}: ${res.detail ?? 'no detail'}`);
+        } else if (res.status === ConnectionStatus.DOWN) {
+          // Google fetch failed and (by design) nothing was imported — no
+          // fixture fallback while a Google connection exists.
+          errors.push(`Calendar sync failed: ${res.detail ?? 'Google Calendar unreachable'}`);
         }
       } catch (e) {
         errors.push(`Calendar sync failed: ${this.errMsg(e)}`);
