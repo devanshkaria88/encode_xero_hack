@@ -74,26 +74,28 @@ export function ConnectionsSurface() {
     const pending = redirectOutcome.current;
     if (!pending) return;
     let cancelled = false;
-    let attemptsLeft = 12;
+    let attemptsLeft = 8;
     const fire = () => {
       if (cancelled) return;
+      // A stable id means re-issuing updates the same toast instead of
+      // stacking duplicates, and restores it if a late hydration pass
+      // remounted the <Toaster> and wiped its list.
       if (pending.outcome === "connected") {
         toast.success("Google connected", {
+          id: "google-redirect",
           description: "Robyn is running the first sync now.",
         });
       } else if (pending.outcome === "error") {
         toast.error("Google connection failed", {
+          id: "google-redirect",
           description: pending.reason || "Please try connecting again.",
         });
       }
-      window.setTimeout(() => {
-        if (cancelled) return;
-        if (document.querySelector("[data-sonner-toast]")) {
-          redirectOutcome.current = null;
-          return;
-        }
-        if (attemptsLeft-- > 0) fire();
-      }, 300);
+      if (attemptsLeft-- > 0) {
+        window.setTimeout(fire, 500);
+      } else {
+        redirectOutcome.current = null;
+      }
     };
     fire();
     return () => {
