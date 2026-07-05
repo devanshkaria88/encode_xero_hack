@@ -43,6 +43,7 @@ export interface RobynConfig {
   google: {
     clientId: string;
     clientSecret: string;
+    redirectUri: string; // must match a URI registered in Google Cloud Console
     configured: boolean;
   };
 }
@@ -79,6 +80,12 @@ export function loadConfig(): RobynConfig {
     google: {
       clientId: googleClientId,
       clientSecret: googleClientSecret,
+      // Default mirrors the URI already registered in Google Cloud Console for
+      // this client (the Next.js app forwards the callback to this API).
+      redirectUri: opt(
+        'GOOGLE_REDIRECT_URI',
+        'http://localhost:3000/api/v1/calendar-providers/google/callback',
+      ),
       configured: Boolean(googleClientId && googleClientSecret),
     },
   };

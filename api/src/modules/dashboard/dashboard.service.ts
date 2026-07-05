@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
   Between,
@@ -20,12 +20,27 @@ import {
   TaskState,
 } from '../../entities';
 import { AuditService } from '../audit/audit.service';
+import { XeroService } from '../xero/xero.service';
+import { XeroInvoice, XeroPayment } from '../xero/xero-api';
+import {
+  bucketInvoicesOwed,
+  bucketProposalsOwed,
+  groupPaymentsByMonth,
+  groupProposalCashInByMonth,
+  lastNMonthKeys,
+  round2,
+} from './charts.util';
 import {
   AuditEventDto,
   CalendarColorKey,
   CalendarEventDto,
+  CashInDto,
+  ChartsSource,
+  DashboardChartsDto,
   DashboardSummaryDto,
+  InvoicesOwedBucketDto,
   LeakStripDto,
+  MoneyFoundBucketDto,
 } from './dto/dashboard.dto';
 
 const MONTH_NAMES = [
@@ -53,8 +68,30 @@ const UNBILLED_MEETING_STATES: MeetingState[] = [
   MeetingState.CLIENT_MATCHED,
 ];
 
+// All detection states, in the order the chart legend reads them.
+const MONEY_FOUND_STATE_ORDER: DetectionState[] = [
+  DetectionState.OPEN,
+  DetectionState.PROPOSED,
+  DetectionState.RESOLVED,
+  DetectionState.DISMISSED,
+];
+
+// Rate-limit discipline: /dashboard/charts costs up to ~6 Xero reads, so the
+// computed payload is cached for 60s — dashboard refreshes never burn the
+// 60/min budget.
+const CHARTS_CACHE_TTL_MS = 60_000;
+
+// Pagination guard: at most 3 pages (of 100) per Xero resource per rebuild.
+const CHARTS_MAX_PAGES = 3;
+const CHARTS_PAGE_SIZE = 100;
+
 @Injectable()
 export class DashboardService {
+  private readonly log = new Logger('DashboardService');
+
+  private chartsCache: { payload: DashboardChartsDto; atMs: number } | null =
+    null;
+
   constructor(
     @InjectRepository(Meeting)
     private readonly meetings: Repository<Meeting>,
@@ -67,6 +104,7 @@ export class DashboardService {
     @InjectRepository(Task)
     private readonly tasks: Repository<Task>,
     private readonly audit: AuditService,
+    private readonly xero: XeroService,
   ) {}
 
   private static round2(n: number): number {
@@ -282,4 +320,135 @@ export class DashboardService {
       clientsCount,
     };
   }
+
+  // GET /dashboard/charts — the whole chart board in one call, 60s-cached.
+  async charts(): Promise<DashboardChartsDto> {
+    if (
+      this.chartsCache &&
+      Date.now() - this.chartsCache.atMs < CHARTS_CACHE_TTL_MS
+    ) {
+      return this.chartsCache.payload;
+    }
+    const payload = await this.buildCharts();
+    this.chartsCache = { payload, atMs: Date.now() };
+    return payload;
+  }
+
+  private async buildCharts(): Promise<DashboardChartsDto> {
+    const today = new Date();
+    const months = lastNMonthKeys(today, 6);
+
+    // Local pieces are always available regardless of Xero.
+    const [moneyFound, leak] = await Promise.all([
+      this.moneyFound(),
+      this.leakStrip(),
+    ]);
+
+    let invoicesOwed: InvoicesOwedBucketDto[] | null = null;
+    let cashIn: CashInDto | null = null;
+    let source: ChartsSource = 'local-fallback';
+
+    // Probe once; even when LIVE every read is still wrapped, so a mid-flight
+    // failure degrades to the local path rather than 500-ing (same pattern as
+    // the detectors).
+    let xeroLive = false;
+    try {
+      xeroLive = (await this.xero.health()).ok;
+    } catch (err) {
+      this.log.warn(`Xero health probe failed: ${errMsg(err)}`);
+    }
+
+    if (xeroLive) {
+      try {
+        const [invoices, payments] = await Promise.all([
+          this.fetchOwedInvoices(),
+          this.fetchRecentPayments(),
+        ]);
+        invoicesOwed = bucketInvoicesOwed(invoices, today);
+        const monthRows = groupPaymentsByMonth(payments, months);
+        cashIn = {
+          months: monthRows,
+          total6m: round2(monthRows.reduce((s, m) => s + m.amountGbp, 0)),
+        };
+        source = 'xero-live';
+      } catch (err) {
+        this.log.warn(`Charts Xero reads failed, using local fallback: ${errMsg(err)}`);
+      }
+    }
+
+    if (!invoicesOwed || !cashIn) {
+      const proposalRows = await this.proposals.find();
+      invoicesOwed = bucketProposalsOwed(proposalRows);
+      const monthRows = groupProposalCashInByMonth(proposalRows, months);
+      cashIn = {
+        months: monthRows,
+        total6m: round2(monthRows.reduce((s, m) => s + m.amountGbp, 0)),
+      };
+      source = 'local-fallback';
+    }
+
+    return {
+      invoicesOwed,
+      cashIn,
+      moneyFound,
+      // Reuse the leak-strip computation verbatim — one source of truth.
+      unbilledPipeline: { items: leak.breakdown, totalGbp: leak.recoverableGbp },
+      meta: { source, generatedAt: new Date().toISOString() },
+    };
+  }
+
+  // Money Robyn found, by detection state. Every state is present (zero-filled)
+  // so the frontend can always show recovered vs pending vs dismissed.
+  private async moneyFound(): Promise<MoneyFoundBucketDto[]> {
+    const rows = await this.detections.find();
+    const acc = new Map<DetectionState, { count: number; amount: number }>(
+      MONEY_FOUND_STATE_ORDER.map((s) => [s, { count: 0, amount: 0 }]),
+    );
+    for (const d of rows) {
+      const bucket = acc.get(d.state);
+      if (!bucket) continue;
+      bucket.count += 1;
+      bucket.amount += Number(d.valueGbp);
+    }
+    return MONEY_FOUND_STATE_ORDER.map((state) => {
+      const bucket = acc.get(state)!;
+      return {
+        state,
+        count: bucket.count,
+        amountGbp: DashboardService.round2(bucket.amount),
+      };
+    });
+  }
+
+  // One batched ACCREC-owed read: DRAFT+SUBMITTED+AUTHORISED in a single
+  // Statuses-filtered call, up to 3 pages of 100.
+  private async fetchOwedInvoices(): Promise<XeroInvoice[]> {
+    const out: XeroInvoice[] = [];
+    for (let page = 1; page <= CHARTS_MAX_PAGES; page++) {
+      const { invoices, pagination } = await this.xero.listInvoices(
+        ['DRAFT', 'SUBMITTED', 'AUTHORISED'],
+        page,
+      );
+      out.push(...invoices);
+      const lastPage = pagination ? page >= pagination.pageCount : false;
+      if (lastPage || invoices.length < CHARTS_PAGE_SIZE) break;
+    }
+    return out;
+  }
+
+  // Payments feed for the cash-in chart, up to 3 pages of 100 (the payments
+  // endpoint has no pagination envelope in our helper — a short page ends it).
+  private async fetchRecentPayments(): Promise<XeroPayment[]> {
+    const out: XeroPayment[] = [];
+    for (let page = 1; page <= CHARTS_MAX_PAGES; page++) {
+      const payments = await this.xero.listPayments(page);
+      out.push(...payments);
+      if (payments.length < CHARTS_PAGE_SIZE) break;
+    }
+    return out;
+  }
+}
+
+function errMsg(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
 }

@@ -1,7 +1,11 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { IsDateString, IsInt, IsOptional, Max, Min } from 'class-validator';
-import { MeetingState, AuditActor } from '../../../entities';
+import { MeetingState, AuditActor, DetectionState } from '../../../entities';
+import {
+  INVOICES_OWED_BUCKET_KEYS,
+  InvoicesOwedBucketKey,
+} from '../charts.util';
 
 // The colour token the calendar view paints an event with. Derived from
 // meeting.state (see DashboardService.colorKeyFor): billed=teal,
@@ -186,6 +190,137 @@ export class AuditEventDto {
 
   @ApiProperty({ description: 'When it happened (ISO datetime).' })
   createdAt!: string;
+}
+
+// ---- Charts (GET /dashboard/charts) ----------------------------------------
+
+// Where the invoice/cash figures came from: live Xero reads, or the local
+// InvoiceProposal table when Xero is unreachable (the endpoint never 500s
+// because Xero is down).
+export type ChartsSource = 'xero-live' | 'local-fallback';
+
+export const CHARTS_SOURCES: ChartsSource[] = ['xero-live', 'local-fallback'];
+
+export class InvoicesOwedBucketDto {
+  @ApiProperty({
+    description:
+      'Bucket key. DRAFT = draft+submitted invoices, AWAITING = authorised and not yet due (or no due date), OVERDUE = authorised and past due.',
+    enum: INVOICES_OWED_BUCKET_KEYS,
+  })
+  key!: InvoicesOwedBucketKey;
+
+  @ApiProperty({ description: 'Number of invoices in this bucket.', example: 3 })
+  count!: number;
+
+  @ApiProperty({
+    description: 'Amount still owed in this bucket (GBP, 2dp) — sum of AmountDue.',
+    example: 1440,
+  })
+  amountGbp!: number;
+}
+
+export class CashInMonthDto {
+  @ApiProperty({ description: 'Calendar month key.', example: '2026-02' })
+  month!: string;
+
+  @ApiProperty({
+    description: 'Payments received against sales invoices that month (GBP, 2dp).',
+    example: 960,
+  })
+  amountGbp!: number;
+}
+
+export class CashInDto {
+  @ApiProperty({
+    description:
+      'Last 6 calendar months (oldest first, current month included), zero-filled so every month has a bar.',
+    type: [CashInMonthDto],
+  })
+  months!: CashInMonthDto[];
+
+  @ApiProperty({
+    description: 'Total received across the 6 months (GBP, 2dp).',
+    example: 5760,
+  })
+  total6m!: number;
+}
+
+export class MoneyFoundBucketDto {
+  @ApiProperty({
+    description: 'Detection lifecycle state this bucket counts.',
+    enum: DetectionState,
+  })
+  state!: DetectionState;
+
+  @ApiProperty({ description: 'Number of detections in this state.', example: 2 })
+  count!: number;
+
+  @ApiProperty({
+    description: 'Total value Robyn found in this state (GBP, 2dp).',
+    example: 2880,
+  })
+  amountGbp!: number;
+}
+
+export class UnbilledPipelineDto {
+  @ApiProperty({
+    description:
+      'Per-source unbilled pipeline (same computation as the leak strip): open detections, invoices in review, unbilled meetings.',
+    type: [LeakBreakdownDto],
+  })
+  items!: LeakBreakdownDto[];
+
+  @ApiProperty({
+    description: 'Total unbilled pipeline (GBP, 2dp) — sums the items.',
+    example: 3555,
+  })
+  totalGbp!: number;
+}
+
+export class ChartsMetaDto {
+  @ApiProperty({
+    description:
+      'Where the invoice/cash figures came from: "xero-live" for live Xero reads, "local-fallback" for the local proposal approximation when Xero is unreachable.',
+    enum: CHARTS_SOURCES,
+  })
+  source!: ChartsSource;
+
+  @ApiProperty({
+    description: 'When this payload was computed (ISO datetime). Cached for up to 60 seconds.',
+    example: '2026-07-04T12:00:00.000Z',
+  })
+  generatedAt!: string;
+}
+
+export class DashboardChartsDto {
+  @ApiProperty({
+    description:
+      'Invoices owed buckets from live Xero ACCREC invoices (or local proposals on fallback). Always all three keys in DRAFT, AWAITING, OVERDUE order.',
+    type: [InvoicesOwedBucketDto],
+  })
+  invoicesOwed!: InvoicesOwedBucketDto[];
+
+  @ApiProperty({
+    description: 'Cash received per month over the last 6 calendar months.',
+    type: CashInDto,
+  })
+  cashIn!: CashInDto;
+
+  @ApiProperty({
+    description:
+      'Money Robyn found, bucketed by detection state (all states present: OPEN, PROPOSED, RESOLVED, DISMISSED) so recovered vs pending vs dismissed can be shown.',
+    type: [MoneyFoundBucketDto],
+  })
+  moneyFound!: MoneyFoundBucketDto[];
+
+  @ApiProperty({
+    description: 'The unbilled pipeline — the leak-strip breakdown reshaped for charting.',
+    type: UnbilledPipelineDto,
+  })
+  unbilledPipeline!: UnbilledPipelineDto;
+
+  @ApiProperty({ description: 'Data provenance and freshness.', type: ChartsMetaDto })
+  meta!: ChartsMetaDto;
 }
 
 export class DashboardSummaryDto {

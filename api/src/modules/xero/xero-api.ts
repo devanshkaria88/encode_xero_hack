@@ -7,6 +7,11 @@
 
 import { xeroFetch, xeroRequest, assertElementOk, Pagination, resolveTenant } from './xero-http';
 
+// Microsoft-JSON date parser ("/Date(ms+0000)/") for DueDate / Date /
+// UpdatedDateUTC fields on read responses. Lives in xero-date.ts; re-exported
+// here so xero-api stays the one import surface for callers.
+export { parseXeroDate } from './xero-date';
+
 // ---- Date helpers (YYYY-MM-DD in UTC) -------------------------------------
 
 function todayISO(): string {
@@ -190,7 +195,12 @@ export async function listInvoices(
   page = 1,
 ): Promise<{ invoices: XeroInvoice[]; pagination?: Pagination }> {
   const res = await xeroFetch<{ Invoices?: XeroInvoice[]; pagination?: Pagination }>('/Invoices', {
-    query: { page, ...(statuses ? { Statuses: statuses.join(',') } : {}), summaryOnly: 'false' },
+    query: {
+      page,
+      pageSize: 100, // explicit (matches the API default) so paging math is deterministic
+      ...(statuses ? { Statuses: statuses.join(',') } : {}),
+      summaryOnly: 'false',
+    },
   });
   return { invoices: res.Invoices ?? [], pagination: res.pagination };
 }
@@ -249,15 +259,18 @@ export async function listAttachments(
 
 export interface XeroPayment {
   PaymentID?: string;
-  Date?: string;
+  Date?: string; // Microsoft-JSON "/Date(ms+0000)/" — parse with parseXeroDate
   Amount?: number;
   Reference?: string;
-  Status?: string;
+  Status?: string; // AUTHORISED | DELETED
+  PaymentType?: string; // ACCRECPAYMENT | ACCPAYPAYMENT | AR/AP credit-note & (pre|over)payment types
   Invoice?: { InvoiceID?: string; InvoiceNumber?: string };
 }
 
 export async function listPayments(page = 1): Promise<XeroPayment[]> {
-  const res = await xeroFetch<{ Payments?: XeroPayment[] }>('/Payments', { query: { page } });
+  const res = await xeroFetch<{ Payments?: XeroPayment[] }>('/Payments', {
+    query: { page, pageSize: 100 },
+  });
   return res.Payments ?? [];
 }
 

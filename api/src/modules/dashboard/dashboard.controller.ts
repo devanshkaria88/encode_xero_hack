@@ -6,6 +6,7 @@ import {
   AuditQueryDto,
   CalendarEventDto,
   CalendarQueryDto,
+  DashboardChartsDto,
   DashboardSummaryDto,
   LeakStripDto,
 } from './dto/dashboard.dto';
@@ -46,6 +47,17 @@ export class DashboardController {
   @ApiOkResponse({ type: [AuditEventDto] })
   audit(@Query() query: AuditQueryDto): Promise<AuditEventDto[]> {
     return this.service.auditTrail(query.limit);
+  }
+
+  @Get('charts')
+  @ApiOperation({
+    summary: 'Chart board data',
+    description:
+      'Everything the chart board needs in one call: invoices owed buckets (draft, awaiting payment, overdue) from live Xero sales invoices, cash received per month for the last 6 months, money Robyn found by detection state, and the unbilled pipeline. Cached for 60 seconds to respect the Xero rate budget. If Xero is unreachable the invoice and cash figures are approximated from local proposals and meta.source reads "local-fallback" — this endpoint never fails because Xero is down.',
+  })
+  @ApiOkResponse({ type: DashboardChartsDto })
+  charts(): Promise<DashboardChartsDto> {
+    return this.service.charts();
   }
 
   @Get('summary')
