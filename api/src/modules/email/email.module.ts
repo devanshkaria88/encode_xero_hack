@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { PotentialClient, Task, Client, ConnectionState } from '../../entities';
+import { GoogleConnection } from '../../entities/google-connection.entity';
 import { ClientsModule } from '../clients/clients.module';
 import { EmailController } from './email.controller';
 import { EmailService } from './email.service';
@@ -12,7 +13,7 @@ import { EmailService } from './email.service';
 // contract-upsert paths the human confirm endpoints use.
 @Module({
   imports: [
-    TypeOrmModule.forFeature([PotentialClient, Task, Client, ConnectionState]),
+    TypeOrmModule.forFeature([PotentialClient, Task, Client, ConnectionState, GoogleConnection]),
     ClientsModule,
   ],
   providers: [EmailService],

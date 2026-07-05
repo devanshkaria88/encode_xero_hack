@@ -17,6 +17,7 @@ import {
   AuditActor,
   AgreementEvidence,
 } from '../../entities';
+import { GoogleConnection } from '../../entities/google-connection.entity';
 import { LlmService } from '../llm/llm.service';
 import { AuditService } from '../audit/audit.service';
 import { ClientsService } from '../clients/clients.service';
@@ -55,6 +56,8 @@ export class EmailService {
     private readonly taskRepo: Repository<Task>,
     @InjectRepository(ConnectionState)
     private readonly connRepo: Repository<ConnectionState>,
+    @InjectRepository(GoogleConnection)
+    private readonly googleConnRepo: Repository<GoogleConnection>,
     private readonly llm: LlmService,
     private readonly audit: AuditService,
     // Reused for the agreement-PDF auto-onboard: the SAME promotion and
@@ -67,6 +70,29 @@ export class EmailService {
     const cfg = loadConfig();
     const now = new Date();
     const nextPollAt = new Date(now.getTime() + POLL_INTERVAL_MS);
+
+    // When a Google connection holds the gmail scope, the Gmail sync (Google
+    // module) owns the email surface — this poll must stand down COMPLETELY.
+    // Running both did two kinds of damage: the fixture poll flipped the
+    // EMAIL connection row to FALLBACK twice an hour over Gmail's LIVE row,
+    // and it advanced every watched sender's lastPolledAt after reading only
+    // fixture files, which silently skipped any real email that arrived
+    // between two Gmail polls (the Gmail query is `after:lastPolledAt`).
+    const googleConn = (await this.googleConnRepo.find({ take: 1 }))[0];
+    if (googleConn && (googleConn.grantedScopes ?? '').includes('/auth/gmail.readonly')) {
+      return {
+        mode: ConnectionStatus.LIVE,
+        detail:
+          'Gmail owns the email surface; the IMAP/fixture poll stood down without touching any state.',
+        polledCount: 0,
+        messagesRead: 0,
+        agreementsDetected: 0,
+        tasksRaised: 0,
+        detected: [],
+        polledAt: now.toISOString(),
+        nextPollAt: nextPollAt.toISOString(),
+      };
+    }
 
     const queued = await this.pcRepo.find({
       where: {

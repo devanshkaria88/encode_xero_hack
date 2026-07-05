@@ -98,6 +98,7 @@ function build(): Stubs {
     pcRepo as never,
     taskRepo as never,
     null as never, // connRepo — unused by processInboundMessages
+    null as never, // googleConnRepo — only poll() reads it
     llm as unknown as LlmService,
     audit as unknown as AuditService,
     clients as unknown as ClientsService,
