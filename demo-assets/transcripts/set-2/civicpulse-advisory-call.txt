@@ -1,0 +1,14 @@
+Devansh: Hi Arjun, good to see you. How was the rollout to the new boroughs?
+Arjun: Smooth mostly. Camden went live on Tuesday, two support tickets, both minor.
+Devansh: That is a good sign. Quick thing before we start, I spent about fifteen minutes on Thursday going through the caching changes you pushed after our last call, the ones for the consultation map tiles.
+Arjun: Ah brilliant. Did the cache keys look sane?
+Devansh: Mostly yes, but you are caching per user when the tiles are identical for everyone, so the hit rate is terrible. My notes from that review are in the thread. That review has not gone onto an invoice yet, just so it is on the record.
+Arjun: Good catch, bill it with this week. Today I mostly wanted your view on the resident survey feature.
+Devansh: Go on.
+Arjun: Product wants branching questions, engineering wants to ship a flat list first. Who is right?
+Devansh: Ship the flat list. Branching doubles your testing surface and the councils have not asked for it.
+Arjun: That settles it. And on the data side, will SQLite hold for the smaller councils?
+Devansh: For read-heavy survey traffic, comfortably. Revisit it if any council passes ten thousand residents responding.
+Arjun: Understood. Next week same time?
+Devansh: Same time. Send me the survey schema and we will walk it through together on the call itself.
+Arjun: Will do. Cheers Devansh.

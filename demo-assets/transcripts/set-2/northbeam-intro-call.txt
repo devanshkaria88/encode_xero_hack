@@ -1,0 +1,14 @@
+Devansh: Maya, hi, thanks for finding the slot. Give me the Northbeam picture.
+Maya: We do carrier analytics for freight brokers. Eight people, two of them engineers, which is part of the problem.
+Devansh: What is hurting right now?
+Maya: Release confidence. Every deploy is a coin flip because there are no tests around the scoring engine.
+Devansh: Is the scoring engine well separated, or tangled through the app?
+Maya: Tangled. It grew inside the API service over two years.
+Devansh: Then do not rewrite it. Fence it off first, put characterisation tests around what it does today, then carve it out behind an interface.
+Maya: That is a much smaller job than what we were quoting internally.
+Devansh: It usually is. The other thing you should look at early is your broker-facing SLAs, because they decide how much test coverage is actually worth paying for.
+Maya: Nobody has framed it that way for us before.
+Devansh: This is the shape of how I work, weekly advisory calls plus reviews between them when you need a second pair of eyes.
+Maya: That works. Send the agreement across and I will get it signed this week.
+Devansh: I will send it over today. Once it is signed we will book the standing slot.
+Maya: Perfect, thanks Devansh.

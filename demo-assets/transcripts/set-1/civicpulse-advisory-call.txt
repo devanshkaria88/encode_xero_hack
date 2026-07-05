@@ -1,0 +1,12 @@
+Devansh: Morning Arjun, how did the council pilot go this week?
+Arjun: Good news, three more boroughs signed up. The dashboard held up fine.
+Devansh: Great. Before we dig in, I went through the consultation-flow pull request you sent over after our last call. Took me about fifteen minutes to review it properly.
+Arjun: Brilliant, I was hoping you would get to that. Did the queue change look right?
+Devansh: Mostly. The retry logic is fine but you are swallowing the webhook errors, I left comments on the diff. That review never made it onto an invoice, by the way.
+Arjun: Noted, add it to this week. So the main thing today is the reporting module.
+Devansh: Right. For reporting I would keep the aggregation in Postgres and skip the warehouse for now.
+Arjun: That matches what we hoped. And the resident notification piece?
+Devansh: Batch it nightly, do not stream it. You will save yourselves a whole service.
+Arjun: Understood. Anything you need from us before next week?
+Devansh: Send me the schema for the reporting tables once it is sketched. I will look at it on our next call rather than offline.
+Arjun: Will do. Thanks Devansh, speak next week.
