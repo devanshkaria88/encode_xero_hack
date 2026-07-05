@@ -2,7 +2,7 @@
 // it is deterministic and unit-testable with zero infrastructure. Services map
 // entities -> these inputs and apply the outputs.
 
-import { ProposalLine } from '../../entities/shapes';
+import { ProposalLine, ContractBillingRules } from '../../entities/shapes';
 
 export type RateUnit = 'HOUR' | 'DAY' | 'FIXED';
 
@@ -37,6 +37,10 @@ export interface BillingInput {
   clauseLabel: string | null; // e.g. "Clause 3.1"
   clauseText: string | null; // verbatim
   hasContract: boolean;
+  // Structured billing rules from the contract (tiers, minimum blocks). When
+  // present, the engine quantises hours and picks the tier deterministically.
+  // Absent/null = plain hours x rate, exactly as before.
+  rules?: ContractBillingRules | null;
 }
 
 export interface ScopeItemInput {
@@ -66,8 +70,12 @@ export interface BuiltProposal {
   taxTotal: number;
   total: number;
   currency: string;
-  // True if any billable scope item was added — those always require review.
+  // True if any billable scope item was added from the transcript.
   hasTranscriptScope: boolean;
+  // True when EVERY line's amount was computed by the engine from contract
+  // data (structured billing rules, or a clause-cited rate). No line carries
+  // a price the contract could not justify. Feeds the autonomy gate.
+  pricedFromContract: boolean;
 }
 
 export interface PolicyInput {
@@ -77,4 +85,8 @@ export interface PolicyInput {
   amount: number;
   contractTermsMaxAmount: number | null; // cap if the contract states one
   hasUnreviewedScope: boolean;
+  // True when every line (including transcript scope) was priced by the
+  // engine from the contract's billing rules or cited clauses. Transcript
+  // scope that the contract itself prices does not need a human.
+  scopePricedFromContract: boolean;
 }

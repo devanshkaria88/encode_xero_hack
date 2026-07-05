@@ -21,9 +21,19 @@ export const GOOGLE_SCOPE_USERINFO = 'https://www.googleapis.com/auth/userinfo.e
 
 const STATE_TTL_MS = 10 * 60 * 1000; // consent flows older than 10 min are stale
 const TOKEN_EARLY_REFRESH_MS = 5 * 60 * 1000; // refresh 5 min before expiry
-const CALENDAR_WINDOW_PAST_DAYS = 14;
-const CALENDAR_WINDOW_FUTURE_DAYS = 30;
 const MAX_LIST_PAGES = 8; // hard cap so a runaway pagination loop cannot spin
+
+// Gmail hard floor: the connected account is a REAL personal inbox, and the
+// product's contract is "Robyn only looks back a day". Nothing older than
+// this is ever fetched, regardless of how stale a lastPolledAt watermark is
+// (e.g. a potential client queued weeks ago must not trigger a trawl of old
+// personal mail on its first poll).
+const GMAIL_LOOKBACK_FLOOR_MS = 24 * 60 * 60 * 1000;
+
+// PDF attachment limits: enough for the agreement-onboarding flow, small
+// enough that a mail blast can never balloon a poll.
+const MAX_PDF_ATTACHMENTS_PER_MESSAGE = 3;
+const MAX_PDF_ATTACHMENT_BYTES = 5 * 1024 * 1024; // 5MB each
 
 // Hard outbound timeouts: identity operations (token exchange/refresh/revoke,
 // userinfo) get 10s, data reads (calendar, gmail) 15s. Every googleapis call
@@ -74,13 +84,59 @@ export interface GoogleCalendarFetch {
 }
 
 // Same shape as the email module's InboundMessage — Gmail messages flow into
-// the identical classify path the fixture mailbox and IMAP use.
+// the identical classify path the fixture mailbox and IMAP use. Attachments
+// are Gmail-only extras (PDFs, capped): the IMAP/fixture paths leave them
+// undefined.
 export interface GmailInboundMessage {
   from: string;
   subject: string;
   body: string;
   date: string | null;
   messageId: string;
+  attachments?: { filename: string; mimeType: string; data: Buffer }[];
+}
+
+// One downloadable PDF part found in a message's MIME tree.
+export interface PdfAttachmentPart {
+  filename: string;
+  mimeType: string;
+  attachmentId: string;
+  size: number; // bytes as reported by Gmail (0 when absent)
+}
+
+/**
+ * Walk a Gmail message payload's MIME tree and collect the PDF attachment
+ * parts worth downloading: a part counts when it has a `body.attachmentId`
+ * (i.e. it is a real attachment, not inline body data) AND looks like a PDF
+ * (mimeType application/pdf, or a .pdf filename on a generic octet-stream).
+ * Oversized parts are dropped here, before any download. Capped at
+ * MAX_PDF_ATTACHMENTS_PER_MESSAGE. Pure — exported for unit tests.
+ */
+export function collectPdfAttachmentParts(payload: any): PdfAttachmentPart[] {
+  const out: PdfAttachmentPart[] = [];
+  const walk = (part: any): void => {
+    if (!part || out.length >= MAX_PDF_ATTACHMENTS_PER_MESSAGE) return;
+    const attachmentId = part.body?.attachmentId;
+    if (attachmentId) {
+      const filename = String(part.filename ?? '');
+      const mimeType = String(part.mimeType ?? '');
+      const isPdf =
+        mimeType.toLowerCase() === 'application/pdf' ||
+        filename.toLowerCase().endsWith('.pdf');
+      const size = Number(part.body?.size ?? 0);
+      if (isPdf && size <= MAX_PDF_ATTACHMENT_BYTES) {
+        out.push({
+          filename: filename || 'attachment.pdf',
+          mimeType: mimeType || 'application/pdf',
+          attachmentId: String(attachmentId),
+          size,
+        });
+      }
+    }
+    for (const child of part.parts ?? []) walk(child);
+  };
+  walk(payload);
+  return out;
 }
 
 // Low-level Google access: the single GoogleConnection row, the OAuth dance,
@@ -119,6 +175,17 @@ export class GoogleClientService {
 
   async saveRow(conn: GoogleConnection): Promise<GoogleConnection> {
     return this.repo.save(conn);
+  }
+
+  /** Force the NEXT calendar sync to run full (with the current configured
+   *  window) instead of incremental. Used by drain/reset scripts after the
+   *  sync window policy changes; fetchCalendarEvents already handles a null
+   *  token via its 410-fallback full-sync path. */
+  async clearCalendarSyncToken(): Promise<void> {
+    const conn = await this.getConnection();
+    if (!conn || conn.calendarSyncToken === null) return;
+    conn.calendarSyncToken = null;
+    await this.repo.save(conn);
   }
 
   async setSyncStatus(
@@ -383,9 +450,14 @@ export class GoogleClientService {
     calendar: any,
     syncToken: string | null,
   ): Promise<{ items: any[]; nextSyncToken: string | null }> {
+    // Full-sync window from config (default 24h back / 48h ahead). The
+    // connected calendar is a real personal one — the product only cares
+    // about yesterday's and the next couple of days' meetings, so a full
+    // sync must never trawl weeks of personal history.
+    const cfg = loadConfig();
     const now = Date.now();
-    const timeMin = new Date(now - CALENDAR_WINDOW_PAST_DAYS * 86400000).toISOString();
-    const timeMax = new Date(now + CALENDAR_WINDOW_FUTURE_DAYS * 86400000).toISOString();
+    const timeMin = new Date(now - cfg.google.calendarLookbackHours * 3600_000).toISOString();
+    const timeMax = new Date(now + cfg.google.calendarLookaheadHours * 3600_000).toISOString();
     const items: any[] = [];
     let nextSyncToken: string | null = null;
     let pageToken: string | undefined;
@@ -442,7 +514,13 @@ export class GoogleClientService {
     const gmail = google.gmail({ version: 'v1', auth });
 
     const fromClause = addrs.length === 1 ? `from:${addrs[0]}` : `from:(${addrs.join(' OR ')})`;
-    const q = since ? `${fromClause} after:${Math.floor(since.getTime() / 1000)}` : fromClause;
+    // Hard 24h floor regardless of the watermark: this is a real personal
+    // inbox and the product only looks back a day. A potential client queued
+    // long ago (stale/null lastPolledAt) must never trigger a trawl of old
+    // personal mail — after: is ALWAYS max(lastPolledAt, now - 24h).
+    const floorMs = Date.now() - GMAIL_LOOKBACK_FLOOR_MS;
+    const sinceMs = Math.max(since?.getTime() ?? 0, floorMs);
+    const q = `${fromClause} after:${Math.floor(sinceMs / 1000)}`;
     const list = await withTimeout<any>(
       gmail.users.messages.list({
         userId: 'me',
@@ -465,7 +543,47 @@ export class GoogleClientService {
         'Gmail message fetch',
       );
       const inbound = this.toInboundMessage(msg.data);
-      if (inbound) out.push(inbound);
+      if (!inbound) continue;
+      const attachments = await this.downloadPdfAttachments(gmail, id, msg.data?.payload);
+      if (attachments.length > 0) inbound.attachments = attachments;
+      out.push(inbound);
+    }
+    return out;
+  }
+
+  /** Download the message's PDF attachment parts (capped, size-limited).
+   *  Best-effort per part: a failed download drops that attachment, never
+   *  the message — the text classify path still runs on the body. */
+  private async downloadPdfAttachments(
+    gmail: any,
+    messageId: string,
+    payload: any,
+  ): Promise<{ filename: string; mimeType: string; data: Buffer }[]> {
+    const parts = collectPdfAttachmentParts(payload);
+    const out: { filename: string; mimeType: string; data: Buffer }[] = [];
+    for (const part of parts) {
+      try {
+        const res = await withTimeout<any>(
+          gmail.users.messages.attachments.get({
+            userId: 'me',
+            messageId,
+            id: part.attachmentId,
+          }),
+          GOOGLE_API_TIMEOUT_MS,
+          'Gmail attachment fetch',
+        );
+        const b64 = String(res.data?.data ?? '');
+        if (!b64) continue;
+        const data = Buffer.from(b64.replace(/-/g, '+').replace(/_/g, '/'), 'base64');
+        // Enforce the size cap on the actual bytes too — list-time `size` is
+        // advisory and absent on some parts.
+        if (data.length === 0 || data.length > MAX_PDF_ATTACHMENT_BYTES) continue;
+        out.push({ filename: part.filename, mimeType: part.mimeType, data });
+      } catch (e) {
+        this.log.warn(
+          `Gmail attachment download failed (${part.filename}): ${String(e).slice(0, 160)}`,
+        );
+      }
     }
     return out;
   }

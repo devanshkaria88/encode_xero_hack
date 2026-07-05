@@ -9,6 +9,7 @@ function base(overrides: Partial<PolicyInput> = {}): PolicyInput {
     amount: 500,
     contractTermsMaxAmount: null,
     hasUnreviewedScope: false,
+    scopePricedFromContract: false,
     ...overrides,
   };
 }
@@ -43,15 +44,39 @@ describe('policyDecision (autonomy gate)', () => {
     expect(policyDecision(base({ amount: 2000, contractTermsMaxAmount: 3000 })).auto).toBe(true);
   });
 
-  it('blocks when the transcript has un-reviewed extra scope', () => {
-    const r = policyDecision(base({ hasUnreviewedScope: true }));
+  it('blocks when transcript scope exists that the contract cannot price', () => {
+    const r = policyDecision(base({ hasUnreviewedScope: true, scopePricedFromContract: false }));
     expect(r.auto).toBe(false);
     expect(r.reasons.some((x) => x.toLowerCase().includes('extra scope'))).toBe(true);
   });
 
+  it('auto-sends transcript scope when every line is priced from the contract', () => {
+    const r = policyDecision(base({ hasUnreviewedScope: true, scopePricedFromContract: true }));
+    expect(r.auto).toBe(true);
+    expect(r.reasons.some((x) => x.includes('priced straight from the contract'))).toBe(true);
+  });
+
+  it('contract-priced scope still needs every other gate to pass', () => {
+    expect(
+      policyDecision(
+        base({ autonomyEnabled: false, hasUnreviewedScope: true, scopePricedFromContract: true }),
+      ).auto,
+    ).toBe(false);
+    expect(
+      policyDecision(
+        base({ hasContractOnFile: false, hasUnreviewedScope: true, scopePricedFromContract: true }),
+      ).auto,
+    ).toBe(false);
+    expect(
+      policyDecision(
+        base({ matchKind: 'AMBIGUOUS', hasUnreviewedScope: true, scopePricedFromContract: true }),
+      ).auto,
+    ).toBe(false);
+  });
+
   it('records a reason for every gate even on success', () => {
     const r = policyDecision(base());
-    expect(r.reasons.join(' ')).toMatch(/Autonomy is ON/);
+    expect(r.reasons.join(' ')).toMatch(/Autonomy is on/);
     expect(r.reasons.join(' ')).toMatch(/Contract on file/);
     expect(r.reasons.join(' ')).toMatch(/Exact client match/);
   });

@@ -1,6 +1,9 @@
 // The autonomy policy — CODE, never LLM. AUTO_SEND iff ALL hold:
 //   client.autonomy_enabled AND contract on file AND exact match AND
-//   amount within contract terms AND no un-reviewed transcript scope.
+//   amount within contract terms AND (no transcript scope, OR every line was
+//   priced by the engine from the contract's own billing rules / cited
+//   clauses). Transcript scope the contract itself prices needs no human;
+//   any line the contract cannot price still forces review.
 // Every reason (pass or fail) is logged and rendered on the card.
 
 import { PolicyResult } from '../../entities/shapes';
@@ -43,8 +46,16 @@ export function policyDecision(input: PolicyInput): PolicyResult {
   }
 
   if (input.hasUnreviewedScope) {
-    auto = false;
-    reasons.push('Transcript contains extra scope. A human must review it before sending.');
+    if (input.scopePricedFromContract) {
+      reasons.push(
+        'Transcript scope is priced straight from the contract billing terms, so no pricing judgement is left for a human.',
+      );
+    } else {
+      auto = false;
+      reasons.push(
+        'Transcript contains extra scope the contract cannot price. A human must review it before sending.',
+      );
+    }
   } else {
     reasons.push('No un-reviewed transcript scope.');
   }

@@ -14,6 +14,8 @@
     "dev:api": "pnpm --filter robyn-api dev",
     "dev:web": "pnpm --filter robyn-web dev",
     "seed": "pnpm --filter robyn-api seed",
+    "drain:live": "npx --prefix api tsx seed/drain-live.ts",
+    "setup:live": "npx --prefix api tsx seed/live-setup.ts",
     "openapi": "pnpm --filter robyn-api openapi && pnpm --filter robyn-web gen:types",
     "build": "pnpm --filter robyn-api build && pnpm --filter robyn-web build"
   },

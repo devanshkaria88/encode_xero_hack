@@ -17,6 +17,7 @@ export class XeroService {
   // Invoices (ACCREC)
   createInvoice = api.createInvoice;
   authoriseInvoice = api.authoriseInvoice;
+  emailInvoice = api.emailInvoice;
   getInvoice = api.getInvoice;
   findInvoiceByReference = api.findInvoiceByReference;
   listInvoices = api.listInvoices;

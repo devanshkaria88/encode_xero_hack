@@ -14,6 +14,9 @@ import { ClientsService } from './clients.service';
   ],
   providers: [ClientsService],
   controllers: [ClientsController, PotentialClientsController],
-  exports: [TypeOrmModule],
+  // ClientsService is exported for the Email module's agreement-PDF
+  // auto-onboard, which reuses the SAME promotion + contract-upsert paths
+  // the human confirm endpoints call (no duplicated logic).
+  exports: [TypeOrmModule, ClientsService],
 })
 export class ClientsModule {}

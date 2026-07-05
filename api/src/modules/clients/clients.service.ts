@@ -15,7 +15,9 @@ import {
   TaskState,
   TaskRefType,
   BillingProfile,
+  ContractBillingRules,
 } from '../../entities';
+import { parseBillingRules } from './billing-rules.parser';
 import { LlmService } from '../llm/llm.service';
 import { XeroService } from '../xero/xero.service';
 import { AuditService } from '../audit/audit.service';

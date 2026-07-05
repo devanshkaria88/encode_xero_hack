@@ -58,4 +58,9 @@ export class InvoiceProposal extends BaseEntity {
   // Whether this proposal was auto-sent (autonomy ON) vs human-approved.
   @Column({ type: 'boolean', default: false })
   autoSent!: boolean;
+
+  // When Xero emailed the invoice to the client (POST /Invoices/{id}/Email).
+  // Null until emailed; also the guard against emailing the same invoice twice.
+  @Column({ type: 'timestamptz', nullable: true })
+  emailedAt!: Date | null;
 }

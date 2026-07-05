@@ -9,6 +9,20 @@ export interface ClauseRef {
   text: string; // verbatim clause text
 }
 
+// Structured billing rules parsed from the contract, when the contract states
+// them (tiered rates, minimum billing blocks, round-up rules). All optional:
+// a contract without these behaves exactly as before (plain hours x rate).
+// The engine consumes this deterministically; the LLM only extracts it.
+export interface ContractBillingRules {
+  baseRateGbp: number; // the standard tier, e.g. 50 (GBP per hour)
+  reducedRateGbp?: number | null; // tier applied when weekly hours pass the threshold
+  reducedRateThresholdHoursPerWeek?: number | null; // e.g. 3 (strictly more than)
+  minBlockMinutes?: number | null; // any session bills at least this, e.g. 30
+  roundUpToBlockMinutes?: number | null; // time beyond the first block rounds up to this
+  billingCycle?: 'weekly' | 'monthly' | null;
+  paymentTermsDays?: number | null; // e.g. 7 => DueDate = invoice date + 7
+}
+
 export interface ContractParsed {
   rate: number | null; // hourly/day rate in the contract currency
   rate_unit: 'HOUR' | 'DAY' | 'FIXED' | null;
@@ -16,6 +30,8 @@ export interface ContractParsed {
   payment_terms: string | null; // e.g. "Net 14"
   scope_summary: string | null;
   clauses: ClauseRef[];
+  // Absent/null on contracts parsed before this field existed — same behavior.
+  billing_rules?: ContractBillingRules | null;
 }
 
 export interface BillingProfile {

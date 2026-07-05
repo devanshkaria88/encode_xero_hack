@@ -190,6 +190,20 @@ export async function authoriseInvoice(invoiceId: string): Promise<XeroInvoice> 
   return res.Invoices[0];
 }
 
+/**
+ * Ask Xero to email the invoice to the contact's email address
+ * (POST /Invoices/{InvoiceID}/Email with an empty JSON body; success is 204).
+ * Requires an AUTHORISED invoice and a contact with an email address —
+ * otherwise Xero rejects it and the error surfaces to the caller, who treats
+ * the email step as best-effort (it must never undo an authorised invoice).
+ */
+export async function emailInvoice(invoiceId: string): Promise<void> {
+  await xeroRequest(`/Invoices/${invoiceId}/Email`, {
+    method: 'POST',
+    json: {},
+  });
+}
+
 export async function listInvoices(
   statuses?: string[],
   page = 1,

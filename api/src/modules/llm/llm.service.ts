@@ -9,6 +9,8 @@ import {
   ContractParsedLLM,
   AgreementClassificationSchema,
   AgreementClassificationLLM,
+  AgreementPdfParsedSchema,
+  AgreementPdfParsedLLM,
   MatchProposalsSchema,
   MatchProposalsLLM,
 } from './schemas';
@@ -70,6 +72,77 @@ export class LlmService {
       }
     }
     throw new Error(`LLM output invalid after retry: ${String(lastErr).slice(0, 300)}`);
+  }
+
+  // Same parse/retry contract as complete(), but the user turn carries a PDF
+  // document block alongside the instruction text.
+  private async completeWithPdf<S extends z.ZodTypeAny>(
+    system: string,
+    user: string,
+    pdf: Buffer,
+    schema: S,
+    maxTokens = 2000,
+  ): Promise<z.infer<S>> {
+    const document: Anthropic.DocumentBlockParam = {
+      type: 'document',
+      source: {
+        type: 'base64',
+        media_type: 'application/pdf',
+        data: pdf.toString('base64'),
+      },
+    };
+    let lastErr: unknown;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const res = await this.client.messages.create({
+        model: MODEL,
+        max_tokens: maxTokens,
+        system,
+        messages: [
+          {
+            role: 'user',
+            content: [
+              document,
+              {
+                type: 'text',
+                text:
+                  attempt === 0
+                    ? user
+                    : `${user}\n\nYour previous reply was not valid JSON for the schema. Reply with ONLY the JSON object, no prose, no code fences.`,
+              },
+            ],
+          },
+        ],
+      });
+      const block = res.content.find((c) => c.type === 'text');
+      const text = block && block.type === 'text' ? block.text : '';
+      try {
+        return schema.parse(this.extractJson(text));
+      } catch (e) {
+        lastErr = e;
+        this.log.warn(`LLM PDF output failed validation (attempt ${attempt + 1}): ${String(e).slice(0, 200)}`);
+      }
+    }
+    throw new Error(`LLM output invalid after retry: ${String(lastErr).slice(0, 300)}`);
+  }
+
+  // --- Agreement PDF -> onboarding facts ------------------------------------
+  // Parses a PDF a prospective client emailed. isAgreement gates the
+  // auto-onboard transition downstream; rawText feeds the SAME contract
+  // pipeline the manual paste flow uses. Parse only — the email module
+  // decides what to do with the result.
+  async parseAgreementPdf(pdf: Buffer, filename: string): Promise<AgreementPdfParsedLLM> {
+    const system =
+      'You read a PDF that a prospective client emailed to a freelancer. Decide whether it is an ' +
+      'AGREEMENT: a contract, engagement letter, advisory/consulting agreement, or statement of work ' +
+      'that commits the client to an engagement. A brochure, invoice, receipt or generic attachment is ' +
+      'NOT an agreement. Return strict JSON. contactName is the client/company name exactly as written ' +
+      'in the document (the counterparty, not the freelancer); null if none is stated. rawText is the ' +
+      'FULL text of the document extracted verbatim, preserving clause numbering — it feeds the contract ' +
+      'parser downstream. summary is one or two plain sentences. Never invent text that is not in the PDF.';
+    const user =
+      `Attachment filename: ${filename.slice(0, 200)}\n\n` +
+      'Return JSON: {"isAgreement": boolean, "contactName": string|null, "rawText": string, "summary": string}';
+    return this.completeWithPdf(system, user, pdf, AgreementPdfParsedSchema, 8000);
   }
 
   // --- Transcript -> scope items + action points ----------------------------

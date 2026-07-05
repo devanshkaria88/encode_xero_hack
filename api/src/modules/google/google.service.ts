@@ -268,6 +268,7 @@ export class GoogleService {
     let messagesRead = 0;
     let agreementsDetected = 0;
     let tasksRaised = 0;
+    let lastAgreementFrom: string | null = null;
 
     for (const pc of queued) {
       const addrs = (pc.emails ?? [])
@@ -285,6 +286,9 @@ export class GoogleService {
         const res = await this.email.processInboundMessages(pc, msgs, ConnectionStatus.LIVE);
         agreementsDetected += res.agreementsDetected;
         tasksRaised += res.tasksRaised;
+        if (res.detected.length > 0) {
+          lastAgreementFrom = this.email.normaliseAddress(res.detected[res.detected.length - 1].from);
+        }
       }
 
       pc.lastPolledAt = now;
@@ -295,8 +299,11 @@ export class GoogleService {
       ConnectionKind.EMAIL,
       ConnectionStatus.LIVE,
       conn.accountEmail ?? 'Gmail',
-      `Live: Gmail INBOX for ${conn.accountEmail ?? 'the connected account'}. ` +
-        'Reads only queued client senders.',
+      lastAgreementFrom
+        ? `Live: agreement received from ${lastAgreementFrom} on this sync. ` +
+            'Reads only queued client senders.'
+        : `Live: Gmail INBOX for ${conn.accountEmail ?? 'the connected account'}. ` +
+            'Reads only queued client senders.',
     );
 
     return { messagesRead, agreementsDetected, tasksRaised };

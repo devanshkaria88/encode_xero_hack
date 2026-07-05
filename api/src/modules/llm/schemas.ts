@@ -36,6 +36,22 @@ export const AgreementClassificationSchema = z.object({
 });
 export type AgreementClassificationLLM = z.infer<typeof AgreementClassificationSchema>;
 
+// Agreement PDF parse (Gmail attachment → auto-onboard). Lengths are clamped
+// here so an over-chatty extraction can never bloat the contract pipeline.
+export const AgreementPdfParsedSchema = z.object({
+  isAgreement: z.boolean(),
+  contactName: z
+    .string()
+    .nullable()
+    .transform((v) => {
+      const t = v?.trim() ?? '';
+      return t.length > 0 ? t.slice(0, 200) : null;
+    }),
+  rawText: z.string().transform((v) => v.slice(0, 60_000)),
+  summary: z.string().transform((v) => v.slice(0, 1_000)),
+});
+export type AgreementPdfParsedLLM = z.infer<typeof AgreementPdfParsedSchema>;
+
 export const MatchProposalSchema = z.object({
   client_id: z.string(),
   client_name: z.string(),

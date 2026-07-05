@@ -19,18 +19,22 @@ import {
 } from '../../entities';
 import { LlmService } from '../llm/llm.service';
 import { AuditService } from '../audit/audit.service';
+import { ClientsService } from '../clients/clients.service';
 import { loadConfig } from '../../config/env';
 import { EmailPollResultDto, DetectedAgreementDto } from './dto/email-poll.dto';
 
 // A normalised inbound message — the same shape whether it came from live
 // IMAP, the fixture mailbox or the Gmail sync (Google module), so the classify
-// path never branches on source.
+// path never branches on source. `attachments` carries PDF attachments only
+// and only the Gmail path populates it (capped at 3 per message, 5MB each);
+// the IMAP and fixture paths simply leave it undefined.
 export interface InboundMessage {
   from: string;
   subject: string;
   body: string;
   date: string | null; // ISO if known
   messageId: string;
+  attachments?: { filename: string; mimeType: string; data: Buffer }[];
 }
 
 const POLL_INTERVAL_MS = 30 * 60 * 1000; // 30 minutes
@@ -53,6 +57,9 @@ export class EmailService {
     private readonly connRepo: Repository<ConnectionState>,
     private readonly llm: LlmService,
     private readonly audit: AuditService,
+    // Reused for the agreement-PDF auto-onboard: the SAME promotion and
+    // contract-upsert paths the human confirm endpoints call.
+    private readonly clients: ClientsService,
   ) {}
 
   // --- Public entry: run one poll cycle ------------------------------------
@@ -177,6 +184,20 @@ export class EmailService {
     const detected: DetectedAgreementDto[] = [];
 
     for (const m of msgs) {
+      // PDF-vs-text fork: a message carrying a PDF attachment (Gmail path
+      // only) may BE the agreement itself — if the parsed PDF is an
+      // agreement, Robyn auto-onboards with zero human clicks. If none of
+      // the PDFs is an agreement (or the parse fails), fall through to the
+      // existing text classification, which still needs a human confirm.
+      if (m.attachments && m.attachments.length > 0) {
+        const onboarded = await this.tryAgreementPdfOnboard(pc, m, mode);
+        if (onboarded) {
+          agreementsDetected += 1;
+          detected.push(onboarded);
+          break; // one agreement per potential client is enough
+        }
+      }
+
       let cls;
       try {
         cls = await this.llm.classifyAgreement(m.from, m.subject, m.body);
@@ -256,6 +277,184 @@ export class EmailService {
     }
 
     return { agreementsDetected, tasksRaised, detected };
+  }
+
+  // --- Agreement-PDF auto-onboard -------------------------------------------
+  // A queued potential client emailed the agreement itself. Parse each PDF
+  // (LLM at the edge, zod-validated); on isAgreement, promote via the SAME
+  // ClientsService path the human confirm endpoint uses, file the contract
+  // via the SAME upsert the POST /clients/:id/contract endpoint uses, and
+  // audit every step. Zero human clicks. Returns null when no attachment is
+  // an agreement — the caller falls back to text classification (which still
+  // raises CONFIRM_AGREEMENT for a human).
+  private async tryAgreementPdfOnboard(
+    pc: PotentialClient,
+    m: InboundMessage,
+    mode: ConnectionStatus,
+  ): Promise<DetectedAgreementDto | null> {
+    const now = new Date();
+    for (const att of m.attachments ?? []) {
+      let parsed;
+      try {
+        parsed = await this.llm.parseAgreementPdf(att.data, att.filename);
+      } catch (err) {
+        const reason = err instanceof Error ? err.message : String(err);
+        this.log.warn(`Agreement PDF parse failed for ${pc.id} (${att.filename}): ${reason}`);
+        await this.audit.record({
+          actor: AuditActor.LLM,
+          action: 'email.pdf_parse_error',
+          summary: `Could not parse attachment "${att.filename}" from ${pc.displayName}: ${reason.slice(0, 200)}`,
+          subjectType: 'potential_client',
+          subjectId: pc.id,
+          inputs: { from: m.from, subject: m.subject, filename: att.filename },
+        });
+        continue; // never guess — try the next PDF / fall back to text
+      }
+
+      if (!parsed.isAgreement) {
+        await this.audit.record({
+          actor: AuditActor.LLM,
+          action: 'email.pdf_no_agreement',
+          summary: `Attachment "${att.filename}" from ${pc.displayName} is not an agreement.`,
+          subjectType: 'potential_client',
+          subjectId: pc.id,
+          inputs: { from: m.from, subject: m.subject, filename: att.filename, summary: parsed.summary },
+        });
+        continue;
+      }
+
+      // The client name comes from the document itself when stated (e.g.
+      // "Northbeam-DKaria"), falling back to the queued display name. The
+      // reused promotion path names the client from the PC row, so set it
+      // there — a rename, not a new code path.
+      const clientName = parsed.contactName ?? pc.displayName;
+      const quote =
+        parsed.summary.trim().length > 0
+          ? parsed.summary.trim()
+          : `Agreement received: ${att.filename}`;
+      const evidence: AgreementEvidence = {
+        email_msg_id: m.messageId,
+        quote,
+        from: m.from,
+        subject: m.subject,
+        received_at: m.date ?? now.toISOString(),
+      };
+
+      pc.state = PotentialClientState.AGREEMENT_DETECTED;
+      pc.evidence = evidence;
+      pc.displayName = clientName;
+      await this.pcRepo.save(pc);
+
+      await this.audit.record({
+        actor: AuditActor.ROBYN,
+        action: 'email.agreement_detected',
+        summary: `Agreement PDF received from ${clientName}: "${att.filename}" — onboarding automatically.`,
+        subjectType: 'potential_client',
+        subjectId: pc.id,
+        inputs: { from: m.from, subject: m.subject, filename: att.filename, quote, mode },
+      });
+
+      // Promote via the same path as POST /potential-clients/:id/confirm.
+      // It creates the Xero contact (ensureContact, idempotent) and survives
+      // Xero being down or rate-limited: the client is created locally with
+      // xeroContactId null and writeInvoice's ensureContact backfills later.
+      let promo;
+      try {
+        promo = await this.clients.confirmPotentialClient(pc.id);
+      } catch (err) {
+        // Promotion itself failed — never a silent dead end: fall back to
+        // the human CONFIRM_AGREEMENT task with the evidence we captured.
+        const reason = err instanceof Error ? err.message : String(err);
+        this.log.warn(`Auto-onboard promotion failed for ${pc.id}: ${reason}`);
+        await this.audit.record({
+          actor: AuditActor.ROBYN,
+          action: 'email.auto_onboard_failed',
+          summary: `Could not auto-onboard ${clientName}: ${reason.slice(0, 200)}. Raised a confirm task instead.`,
+          subjectType: 'potential_client',
+          subjectId: pc.id,
+          inputs: { from: m.from, filename: att.filename },
+        });
+        const taskId = await this.raiseConfirmAgreementTask(pc, evidence);
+        return {
+          potentialClientId: pc.id,
+          displayName: clientName,
+          from: m.from,
+          subject: m.subject,
+          quote,
+          taskId: taskId ?? undefined,
+        };
+      }
+
+      await this.audit.record({
+        actor: AuditActor.ROBYN,
+        action: 'email.auto_onboarded',
+        summary: `Onboarded ${promo.clientName} from an agreement received by email ("${att.filename}" from ${m.from}).`,
+        subjectType: 'client',
+        subjectId: promo.clientId,
+        inputs: {
+          potentialClientId: pc.id,
+          filename: att.filename,
+          from: m.from,
+          xeroContactId: promo.xeroContactId,
+          xeroContactCreated: promo.xeroContactCreated,
+        },
+      });
+      if (promo.xeroError) {
+        await this.audit.record({
+          actor: AuditActor.XERO,
+          action: 'email.xero_contact_deferred',
+          summary: `Xero contact creation deferred for ${promo.clientName} (${promo.xeroError.slice(0, 160)}). The first invoice write will create it.`,
+          subjectType: 'client',
+          subjectId: promo.clientId,
+          inputs: { error: promo.xeroError },
+        });
+      }
+
+      // File the contract through the SAME pipeline as POST
+      // /clients/:id/contract — clause parsing and the billing profile live
+      // there. On parse failure the ATTACH_CONTRACT task raised by the
+      // promotion stays open, so a human can retry with the text.
+      try {
+        await this.clients.upsertContract(promo.clientId, {
+          title: att.filename,
+          rawText: parsed.rawText,
+        });
+        await this.audit.record({
+          actor: AuditActor.ROBYN,
+          action: 'email.contract_filed',
+          summary: `Contract "${att.filename}" filed for ${promo.clientName} from the agreement email.`,
+          subjectType: 'client',
+          subjectId: promo.clientId,
+          inputs: { potentialClientId: pc.id, filename: att.filename, emailMsgId: m.messageId },
+        });
+      } catch (err) {
+        const reason = err instanceof Error ? err.message : String(err);
+        this.log.warn(`Contract upsert failed for auto-onboarded ${promo.clientId}: ${reason}`);
+        await this.audit.record({
+          actor: AuditActor.ROBYN,
+          action: 'email.contract_file_failed',
+          summary: `Onboarded ${promo.clientName}, but filing the contract failed: ${reason.slice(0, 200)}. The ATTACH_CONTRACT task stays open.`,
+          subjectType: 'client',
+          subjectId: promo.clientId,
+          inputs: { filename: att.filename },
+        });
+      }
+
+      // The promotion path saved its own copy of this row (state PROMOTED).
+      // Refresh the caller's in-memory entity so the poll loop's later
+      // lastPolledAt save cannot write stale fields back over it.
+      const freshPc = await this.pcRepo.findOne({ where: { id: pc.id } });
+      if (freshPc) Object.assign(pc, freshPc);
+
+      return {
+        potentialClientId: pc.id,
+        displayName: promo.clientName,
+        from: m.from,
+        subject: m.subject,
+        quote,
+      };
+    }
+    return null;
   }
 
   // --- Task raise (idempotent by dedupeKey) --------------------------------

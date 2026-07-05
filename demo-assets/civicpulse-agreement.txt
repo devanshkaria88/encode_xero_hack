@@ -1,0 +1,60 @@
+TECHNICAL ADVISORY AGREEMENT
+
+This Technical Advisory Agreement (the "Agreement") is made on 12 January 2026 between:
+
+CivicPulse-DevanshKaria, a civic technology company operating a resident engagement and council consultation platform (the "Client"); and
+
+Devansh Karia, an independent technology consultant (the "Consultant").
+
+1. Engagement
+1.1 The Client engages the Consultant to provide ongoing technical advisory services, and the Consultant accepts the engagement on the terms of this Agreement.
+1.2 The engagement is non-exclusive. The Consultant may provide services to other clients provided no conflict of interest arises under clause 6.
+
+2. Services
+2.1 The Consultant shall advise the Client on the architecture, scalability and engineering practices of the Client's civic engagement platform, including its consultation workflows, resident notification services, reporting pipelines and public sector integrations.
+2.2 Advisory services are delivered primarily through scheduled advisory sessions held by video call or in person.
+2.3 Code reviews of the Client's repositories carried out by the Consultant, and preparation carried out at the Client's request, count as billable advisory time under clause 3.
+
+3. Fees
+3.1 Advisory time is charged per hour.
+3.2 Where the total advisory time in a billing week is three (3) hours or fewer, the rate is GBP 50 (fifty pounds) per hour.
+3.3 Where the total advisory time in a billing week exceeds three (3) hours, a rate of GBP 40 (forty pounds) per hour applies to the whole of that week's advisory time.
+3.4 The minimum billing block is thirty (30) minutes. Any advisory session, code review or requested preparation bills at least one block.
+3.5 Time beyond the first block rounds up to the nearest thirty (30) minutes.
+3.6 All fees are exclusive of VAT, which is added where applicable.
+
+4. Invoicing and Payment
+4.1 The Consultant invoices weekly, with each invoice covering the advisory time of the preceding week.
+4.2 Invoices are payable within seven (7) days of the invoice date.
+4.3 The Consultant may charge statutory interest on sums overdue under the Late Payment of Commercial Debts (Interest) Act 1998.
+
+5. Independent Contractor
+5.1 The Consultant is an independent contractor. Nothing in this Agreement creates a relationship of employment, partnership or agency between the parties.
+5.2 The Consultant is responsible for the Consultant's own tax and National Insurance contributions.
+
+6. Confidentiality
+6.1 Each party shall keep confidential all non-public information received from the other in connection with this Agreement, and shall use it only for the purposes of the engagement.
+6.2 This obligation survives termination of this Agreement for a period of three (3) years.
+
+7. Intellectual Property
+7.1 All intellectual property in the Client's platform and repositories remains the property of the Client.
+7.2 Any written advice, review notes or documentation produced by the Consultant specifically for the Client under this Agreement is assigned to the Client on payment of the corresponding invoice.
+
+8. Term and Termination
+8.1 This Agreement commences on the date first written above and continues until terminated by either party on fourteen (14) days' written notice.
+8.2 Termination does not affect the Client's obligation to pay for advisory time already provided.
+
+9. Liability
+9.1 The Consultant provides advice in good faith; decisions on implementation remain the Client's own. The Consultant's aggregate liability under this Agreement is limited to the fees paid in the three (3) months preceding the claim.
+9.2 Nothing in this Agreement limits liability for fraud or for death or personal injury caused by negligence.
+
+10. Governing Law
+10.1 This Agreement is governed by the laws of England and Wales, and the parties submit to the exclusive jurisdiction of the courts of England and Wales.
+
+SIGNED for and on behalf of CivicPulse-DevanshKaria:
+Arjun Mehta, Founder
+Date: 12 January 2026
+
+SIGNED by the Consultant:
+Devansh Karia
+Date: 12 January 2026

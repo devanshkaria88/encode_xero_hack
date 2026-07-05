@@ -45,6 +45,11 @@ export interface RobynConfig {
     clientSecret: string;
     redirectUri: string; // must match a URI registered in Google Cloud Console
     configured: boolean;
+    // Calendar full-sync window. The connected account is a REAL personal
+    // calendar/inbox — the product only looks back a day (and ahead two) so a
+    // demo sync never trawls months of personal history.
+    calendarLookbackHours: number;
+    calendarLookaheadHours: number;
   };
 }
 
@@ -89,6 +94,8 @@ export function loadConfig(): RobynConfig {
         'http://localhost:3001/calendar/callback',
       ),
       configured: Boolean(googleClientId && googleClientSecret),
+      calendarLookbackHours: Number(opt('GOOGLE_CAL_LOOKBACK_HOURS', '24')),
+      calendarLookaheadHours: Number(opt('GOOGLE_CAL_LOOKAHEAD_HOURS', '48')),
     },
   };
   return cached;
