@@ -205,6 +205,8 @@ export class ProposalsService {
 
     const decisionNote = this.buildDecisionNote(p, client, authorise);
     const evidence = await this.buildEvidence(p, contract);
+    // Contract-stated payment terms drive the DueDate (e.g. due in 7 days).
+    const termsDays = contract?.parsed?.billing_rules?.paymentTermsDays ?? null;
 
     try {
       const result = await this.xero.writeInvoice({
@@ -214,6 +216,7 @@ export class ProposalsService {
         reference: p.reference,
         lines: lineItems,
         currency: p.currency ?? 'GBP',
+        dueDate: termsDays != null ? isoDateInDays(termsDays) : undefined,
         authorise,
         decisionNote,
         evidence,
@@ -253,6 +256,19 @@ export class ProposalsService {
         },
       });
 
+      // Email the authorised invoice to the client via Xero. Best-effort by
+      // design: a failure here never fails the approve — the invoice is
+      // already AUTHORISED and stays that way.
+      let emailNote = '';
+      if (authorise) {
+        emailNote = await this.emailInvoiceViaXero(
+          p,
+          client?.emails?.[0],
+          result.invoiceId,
+          result.invoiceNumber ?? result.invoiceId,
+        );
+      }
+
       return {
         id: p.id,
         state: p.state,
@@ -261,11 +277,12 @@ export class ProposalsService {
         xeroInvoiceNumber: p.xeroInvoiceNumber,
         xeroDeepLink: p.xeroDeepLink,
         xeroError: null,
+        emailedAt: p.emailedAt ? new Date(p.emailedAt).toISOString() : null,
         subtotal: Number(p.subtotal),
         taxTotal: Number(p.taxTotal),
         total: Number(p.total),
         message: authorise
-          ? 'Invoice authorised and sent to Xero.'
+          ? `Invoice authorised and sent to Xero.${emailNote}`
           : 'Draft invoice created in Xero. Still awaiting your approval to send.',
       };
     } catch (err) {
@@ -297,11 +314,62 @@ export class ProposalsService {
         xeroInvoiceNumber: p.xeroInvoiceNumber ?? null,
         xeroDeepLink: p.xeroDeepLink ?? null,
         xeroError: message,
+        emailedAt: p.emailedAt ? new Date(p.emailedAt).toISOString() : null,
         subtotal: Number(p.subtotal),
         taxTotal: Number(p.taxTotal),
         total: Number(p.total),
         message: `Xero write failed. Proposal kept in review. ${message}`,
       };
+    }
+  }
+
+  /**
+   * Ask Xero to email an authorised invoice to the client's address
+   * (POST /Invoices/{id}/Email). Best-effort: never throws, audits every
+   * outcome, and returns a sentence fragment for the action message.
+   */
+  private async emailInvoiceViaXero(
+    p: InvoiceProposal,
+    clientEmail: string | undefined,
+    invoiceId: string,
+    invoiceLabel: string,
+  ): Promise<string> {
+    if (p.emailedAt) return ' Already emailed to the client earlier.';
+    if (!clientEmail) {
+      await this.audit.record({
+        actor: AuditActor.ROBYN,
+        action: 'xero.invoice.email_skipped',
+        summary: `Invoice ${invoiceLabel} was not emailed: the client has no email address on file.`,
+        subjectType: 'proposal',
+        subjectId: p.id,
+        inputs: { invoiceId },
+      });
+      return ' Not emailed: the client has no email address on file.';
+    }
+    try {
+      await this.xero.emailInvoice(invoiceId);
+      p.emailedAt = new Date();
+      await this.proposals.save(p);
+      await this.audit.record({
+        actor: AuditActor.XERO,
+        action: 'xero.invoice.emailed',
+        summary: `Invoice ${invoiceLabel} emailed to ${clientEmail} via Xero.`,
+        subjectType: 'proposal',
+        subjectId: p.id,
+        inputs: { invoiceId, email: clientEmail },
+      });
+      return ` Emailed to ${clientEmail} via Xero.`;
+    } catch (err) {
+      const reason = errMsg(err).slice(0, 300);
+      await this.audit.record({
+        actor: AuditActor.XERO,
+        action: 'xero.invoice.email_failed',
+        summary: `Xero accepted the invoice but the email step failed: ${reason}`,
+        subjectType: 'proposal',
+        subjectId: p.id,
+        inputs: { invoiceId, email: clientEmail, error: reason },
+      });
+      return ` The invoice is authorised, but the email step failed: ${reason}`;
     }
   }
 

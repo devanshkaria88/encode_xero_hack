@@ -92,6 +92,12 @@ export class MeetingProposalDto {
   @ApiProperty({ description: 'True if Robyn auto-sent it (autonomy ON).' })
   autoSent!: boolean;
 
+  @ApiPropertyOptional({
+    nullable: true,
+    description: 'ISO timestamp when Xero emailed the invoice to the client; null if not emailed.',
+  })
+  emailedAt!: string | null;
+
   @ApiPropertyOptional({ nullable: true })
   xeroInvoiceId!: string | null;
 

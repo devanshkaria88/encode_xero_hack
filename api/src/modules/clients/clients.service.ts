@@ -25,6 +25,7 @@ import {
   BillingProfileDto,
   ClientDetailDto,
   ClientListItemDto,
+  ContractBillingRulesDto,
   ContractDto,
   ContractSummaryDto,
   InvoiceHistoryItemDto,
@@ -128,6 +129,41 @@ export class ClientsService {
       inputs: { title: body.title ?? null, clauses: parsed.clauses.length },
     });
 
+    // Second LLM edge: structured billing rules (tiers, minimum blocks), only
+    // when the contract states them. Extraction failure never blocks filing
+    // the contract — the client just keeps plain hours x rate pricing, and an
+    // audit row says so (re-attach the contract to retry).
+    let billingRules: ContractBillingRules | null = null;
+    try {
+      billingRules = await parseBillingRules(body.rawText);
+      if (billingRules) {
+        await this.audit.record({
+          actor: AuditActor.LLM,
+          action: 'client.contract.billing_rules_parsed',
+          summary:
+            `Structured billing rules found for ${client.name}: base ${billingRules.baseRateGbp} GBP/hour` +
+            (billingRules.reducedRateGbp != null && billingRules.reducedRateThresholdHoursPerWeek != null
+              ? `, ${billingRules.reducedRateGbp} GBP/hour beyond ${billingRules.reducedRateThresholdHoursPerWeek}h a week`
+              : '') +
+            (billingRules.minBlockMinutes != null
+              ? `, ${billingRules.minBlockMinutes}-minute minimum block`
+              : '') +
+            '.',
+          subjectType: 'client',
+          subjectId: client.id,
+          inputs: { billingRules },
+        });
+      }
+    } catch (e) {
+      await this.audit.record({
+        actor: AuditActor.LLM,
+        action: 'client.contract.billing_rules_parse_failed',
+        summary: `Could not extract structured billing rules for ${client.name}: ${String(e).slice(0, 160)}. Contract filed with the plain rate only.`,
+        subjectType: 'client',
+        subjectId: client.id,
+      });
+    }
+
     let contract = await this.latestContract(id);
     if (!contract) {
       contract = this.contracts.create({ clientId: id });
@@ -142,6 +178,7 @@ export class ClientsService {
       payment_terms: parsed.payment_terms,
       scope_summary: parsed.scope_summary,
       clauses: parsed.clauses,
+      billing_rules: billingRules,
     };
     contract = await this.contracts.save(contract);
 
@@ -474,8 +511,24 @@ export class ClientsService {
       paymentTerms: parsed?.payment_terms ?? null,
       scopeSummary: parsed?.scope_summary ?? null,
       clauses: parsed?.clauses ?? [],
+      billingRules: this.toBillingRulesDto(parsed?.billing_rules ?? null),
       createdAt: contract.createdAt.toISOString(),
       updatedAt: contract.updatedAt.toISOString(),
+    };
+  }
+
+  private toBillingRulesDto(
+    rules: ContractBillingRules | null | undefined,
+  ): ContractBillingRulesDto | null {
+    if (!rules) return null;
+    return {
+      baseRateGbp: rules.baseRateGbp,
+      reducedRateGbp: rules.reducedRateGbp ?? null,
+      reducedRateThresholdHoursPerWeek: rules.reducedRateThresholdHoursPerWeek ?? null,
+      minBlockMinutes: rules.minBlockMinutes ?? null,
+      roundUpToBlockMinutes: rules.roundUpToBlockMinutes ?? null,
+      billingCycle: rules.billingCycle ?? null,
+      paymentTermsDays: rules.paymentTermsDays ?? null,
     };
   }
 

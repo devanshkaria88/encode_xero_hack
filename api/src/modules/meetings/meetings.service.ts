@@ -221,6 +221,9 @@ export class MeetingsService {
       clauseLabel: clause?.ref ?? bp?.provenance ?? null,
       clauseText: clause?.text ?? null,
       hasContract: hasContractOnFile,
+      // Structured rules (tiers, minimum blocks) — the engine quantises with
+      // these deterministically. Null on contracts that never stated any.
+      rules: contract?.parsed?.billing_rules ?? null,
     };
 
     const scopeItems: ScopeItemInput[] = (transcript?.parsed?.scope_items ?? []).map((s) => ({
@@ -251,6 +254,7 @@ export class MeetingsService {
       amount: built.total,
       contractTermsMaxAmount: null,
       hasUnreviewedScope: built.hasTranscriptScope,
+      scopePricedFromContract: built.pricedFromContract,
     });
     await this.audit.record({
       actor: AuditActor.ROBYN,
@@ -291,6 +295,8 @@ export class MeetingsService {
     if (decision.autoSend) {
       const decisionNote = this.decisionNote(client.name, block.label, policyResult, built, true);
       const evidence = this.buildEvidence(transcript, clause);
+      // Contract-stated payment terms drive the DueDate (e.g. due in 7 days).
+      const termsDays = contract?.parsed?.billing_rules?.paymentTermsDays ?? null;
       try {
         const result = await this.xero.writeInvoice({
           clientName: client.name,
@@ -299,6 +305,7 @@ export class MeetingsService {
           reference,
           lines: this.toXeroLines(built.lines),
           currency: built.currency,
+          dueDate: termsDays != null ? isoDateInDays(termsDays) : undefined,
           authorise: true,
           decisionNote,
           evidence,
@@ -315,6 +322,14 @@ export class MeetingsService {
         }
         meeting.state = MeetingState.SENT;
         await this.meetingRepo.save(meeting);
+        // A rerun can auto-send a proposal that once sat in review — close any
+        // REVIEW_INVOICE task so the auto path never leaves an orphan behind.
+        await this.resolveTask(
+          TaskType.REVIEW_INVOICE,
+          proposal.id,
+          'Auto-sent to Xero under the autonomy policy',
+          AuditActor.ROBYN,
+        );
         await this.audit.record({
           actor: AuditActor.XERO,
           action: 'xero.invoice.sent',
@@ -323,6 +338,14 @@ export class MeetingsService {
           subjectId: proposal.id,
           inputs: { reference, invoiceId: result.invoiceId, decisionNote },
         });
+        // Email the authorised invoice to the client via Xero. Best-effort:
+        // a failure here never unwinds the authorised invoice.
+        proposal = await this.emailInvoiceViaXero(
+          proposal,
+          client.emails?.[0],
+          result.invoiceId,
+          result.invoiceNumber ?? result.invoiceId,
+        );
         return { meeting, proposal, xeroError: null };
       } catch (e) {
         const msg = String((e as { message?: string })?.message ?? e).slice(0, 300);
@@ -952,6 +975,55 @@ export class MeetingsService {
     return parts.join(' ').slice(0, 2400);
   }
 
+  /**
+   * Ask Xero to email an authorised invoice to the client. Best-effort by
+   * design: the invoice is already AUTHORISED in Xero and nothing here may
+   * fail the send. Every outcome (emailed / skipped / failed) is audited.
+   */
+  private async emailInvoiceViaXero(
+    proposal: InvoiceProposal,
+    clientEmail: string | undefined,
+    invoiceId: string,
+    invoiceLabel: string,
+  ): Promise<InvoiceProposal> {
+    if (proposal.emailedAt) return proposal; // never email the same invoice twice
+    if (!clientEmail) {
+      await this.audit.record({
+        actor: AuditActor.ROBYN,
+        action: 'xero.invoice.email_skipped',
+        summary: `Invoice ${invoiceLabel} was not emailed: the client has no email address on file.`,
+        subjectType: 'proposal',
+        subjectId: proposal.id,
+        inputs: { invoiceId },
+      });
+      return proposal;
+    }
+    try {
+      await this.xero.emailInvoice(invoiceId);
+      proposal.emailedAt = new Date();
+      proposal = await this.proposalRepo.save(proposal);
+      await this.audit.record({
+        actor: AuditActor.XERO,
+        action: 'xero.invoice.emailed',
+        summary: `Invoice ${invoiceLabel} emailed to ${clientEmail} via Xero.`,
+        subjectType: 'proposal',
+        subjectId: proposal.id,
+        inputs: { invoiceId, email: clientEmail },
+      });
+    } catch (e) {
+      const reason = String((e as { message?: string })?.message ?? e).slice(0, 300);
+      await this.audit.record({
+        actor: AuditActor.XERO,
+        action: 'xero.invoice.email_failed',
+        summary: `Xero accepted the invoice but the email step failed: ${reason}`,
+        subjectType: 'proposal',
+        subjectId: proposal.id,
+        inputs: { invoiceId, email: clientEmail, error: reason },
+      });
+    }
+    return proposal;
+  }
+
   private buildEvidence(transcript: Transcript | null, clause: ClauseRef | null) {
     const evidence: { filename: string; text: string }[] = [];
     if (transcript) {
@@ -1038,6 +1110,7 @@ export class MeetingsService {
       taxTotal: Number(p.taxTotal),
       total: Number(p.total),
       autoSent: p.autoSent,
+      emailedAt: p.emailedAt ? new Date(p.emailedAt).toISOString() : null,
       xeroInvoiceId: p.xeroInvoiceId,
       xeroInvoiceNumber: p.xeroInvoiceNumber,
       xeroDeepLink: p.xeroDeepLink,
@@ -1125,4 +1198,11 @@ export class MeetingsService {
 
 function round2(n: number): number {
   return Math.round((n + Number.EPSILON) * 100) / 100;
+}
+
+/** YYYY-MM-DD (UTC) a number of days from today — contract payment terms. */
+function isoDateInDays(days: number): string {
+  const d = new Date();
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
 }

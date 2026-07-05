@@ -76,6 +76,51 @@ export class ClauseDto {
   text!: string;
 }
 
+// Structured billing rules parsed from the contract, when the contract states
+// them. The deterministic engine prices with these; absent = plain hours x rate.
+export class ContractBillingRulesDto {
+  @ApiProperty({ type: Number, example: 50, description: 'Standard hourly rate in GBP.' })
+  baseRateGbp!: number;
+
+  @ApiProperty({
+    type: Number,
+    nullable: true,
+    example: 40,
+    description: 'Reduced hourly rate applied to the whole week once weekly hours pass the threshold.',
+  })
+  reducedRateGbp!: number | null;
+
+  @ApiProperty({
+    type: Number,
+    nullable: true,
+    example: 3,
+    description: 'Weekly hours above which the reduced rate applies to every hour that week.',
+  })
+  reducedRateThresholdHoursPerWeek!: number | null;
+
+  @ApiProperty({
+    type: Number,
+    nullable: true,
+    example: 30,
+    description: 'Minimum billing block in minutes. Any session bills at least one block.',
+  })
+  minBlockMinutes!: number | null;
+
+  @ApiProperty({
+    type: Number,
+    nullable: true,
+    example: 30,
+    description: 'Time beyond the first block rounds up to the nearest block of this many minutes.',
+  })
+  roundUpToBlockMinutes!: number | null;
+
+  @ApiProperty({ type: String, nullable: true, enum: ['weekly', 'monthly'], example: 'weekly' })
+  billingCycle!: 'weekly' | 'monthly' | null;
+
+  @ApiProperty({ type: Number, nullable: true, example: 7, description: 'Days until payment is due.' })
+  paymentTermsDays!: number | null;
+}
+
 // The full parsed contract — GET /clients/:id/contract.
 export class ContractDto {
   @ApiProperty({ type: String, format: 'uuid' })
@@ -110,6 +155,13 @@ export class ContractDto {
 
   @ApiProperty({ type: [ClauseDto], description: 'Every parsed clause, each keeping its citation.' })
   clauses!: ClauseDto[];
+
+  @ApiProperty({
+    type: ContractBillingRulesDto,
+    nullable: true,
+    description: 'Structured billing rules (tiers, minimum blocks), when the contract states them.',
+  })
+  billingRules!: ContractBillingRulesDto | null;
 
   @ApiProperty({ type: String, format: 'date-time' })
   createdAt!: string;
