@@ -36,7 +36,7 @@ export class LineProvenanceDto {
 // An editable invoice line. quantity * unit_amount is recomputed server-side,
 // so any client-supplied line_amount is authoritative only after recompute.
 export class ProposalLineDto {
-  @ApiProperty({ example: 'Consulting — Tue 3 Jun (1.5h @ 150 GBP/hour)' })
+  @ApiProperty({ example: 'Consulting, Tue 3 Jun (1.5h @ 150 GBP/hour)' })
   @IsString()
   description!: string;
 

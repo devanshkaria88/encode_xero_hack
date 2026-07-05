@@ -31,6 +31,12 @@ async function request<T>(
   init?: RequestInit,
 ): Promise<T> {
   const url = path.startsWith("http") ? path : `${API_BASE}${path}`;
+  // Default timeout so one hung endpoint can never freeze a surface forever.
+  // Callers that pass their own signal own the request's lifetime instead.
+  // (streamChat is long-lived and manages its own AbortController — it does
+  // not go through request(), so it is never subject to this timeout.)
+  const timedOut = init?.signal == null;
+  const signal = init?.signal ?? AbortSignal.timeout(20_000);
   let res: Response;
   try {
     res = await fetch(url, {
@@ -43,8 +49,12 @@ async function request<T>(
       body: body !== undefined ? JSON.stringify(body) : undefined,
       cache: "no-store",
       ...init,
+      signal,
     });
   } catch (err) {
+    if (timedOut && signal.aborted) {
+      throw new ApiError(0, "Robyn's API took too long to respond.", err);
+    }
     // Network / CORS / server-down. Surface a human message, never crash.
     throw new ApiError(
       0,
@@ -53,7 +63,20 @@ async function request<T>(
     );
   }
 
-  const text = await res.text();
+  let text: string;
+  try {
+    text = await res.text();
+  } catch (err) {
+    // The body can stall after headers arrive; the same timeout covers it.
+    if (timedOut && signal.aborted) {
+      throw new ApiError(0, "Robyn's API took too long to respond.", err);
+    }
+    throw new ApiError(
+      0,
+      "Cannot reach Robyn's API. Check the connection and try again.",
+      err,
+    );
+  }
   const parsed = text
     ? (() => {
         try {

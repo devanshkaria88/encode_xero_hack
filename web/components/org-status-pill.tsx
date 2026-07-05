@@ -61,7 +61,7 @@ export function OrgStatusPill() {
         </div>
       </TooltipTrigger>
       <TooltipContent>
-        <p className="font-medium text-foreground">Xero — {meta.label}</p>
+        <p className="font-medium text-foreground">Xero: {meta.label}</p>
         <p className="mt-0.5 text-muted-foreground">{detail}</p>
       </TooltipContent>
     </Tooltip>

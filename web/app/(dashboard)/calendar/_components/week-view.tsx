@@ -3,6 +3,7 @@
 import * as React from "react";
 
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 import { TONE_CLASS, type BadgeTone } from "@/lib/states";
 import {
   HOUR_HEIGHT,
@@ -206,6 +207,8 @@ export interface TimeGridProps {
   onEventClick: (event: GridEvent) => void;
   /** Shown as a floating hint when the visible days have no events. */
   emptyLabel: string;
+  /** Optional action under the empty hint (e.g. jump to the demo week). */
+  emptyAction?: { label: string; onClick: () => void };
   className?: string;
 }
 
@@ -214,6 +217,7 @@ export function TimeGrid({
   events,
   onEventClick,
   emptyLabel,
+  emptyAction,
   className,
 }: TimeGridProps) {
   const scrollRef = React.useRef<HTMLDivElement>(null);
@@ -232,11 +236,13 @@ export function TimeGrid({
   const nowTop = (minutesOfDay(now) / 60) * HOUR_HEIGHT;
 
   // Auto-scroll to just above now (today visible) or to the working morning.
+  // The hour labels straddle their grid line (they sit 8px above it), so back
+  // off the exact hour boundary by 12px — otherwise the top label is clipped.
   React.useEffect(() => {
     const container = scrollRef.current;
     if (!container) return;
     const targetHour = showNowIndicator ? Math.max(londonHourNow() - 2, 6) : 8;
-    container.scrollTop = targetHour * HOUR_HEIGHT;
+    container.scrollTop = Math.max(targetHour * HOUR_HEIGHT - 12, 0);
   }, [daysKey, showNowIndicator]);
 
   const visibleCount = React.useMemo(
@@ -326,10 +332,20 @@ export function TimeGrid({
 
       {/* Quiet empty hint, floating over the grid so the surface stays useful. */}
       {visibleCount === 0 && (
-        <div className="pointer-events-none absolute inset-x-0 top-20 z-20 flex justify-center">
+        <div className="pointer-events-none absolute inset-x-0 top-20 z-20 flex flex-col items-center gap-2">
           <span className="rounded-full border border-border bg-card px-3 py-1 text-xs text-muted-foreground shadow-sm">
             {emptyLabel}
           </span>
+          {emptyAction && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="pointer-events-auto cursor-pointer bg-card shadow-sm"
+              onClick={emptyAction.onClick}
+            >
+              {emptyAction.label}
+            </Button>
+          )}
         </div>
       )}
 

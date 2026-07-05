@@ -1,4 +1,5 @@
 import type { Schemas } from "@/lib/api";
+import { LONDON_TZ } from "@/lib/calendar-utils";
 
 /**
  * Helpers for reading a Task's free-form `context` (jsonb) safely. The OpenAPI
@@ -65,14 +66,18 @@ export function readAttendees(ctx: Ctx): CtxAttendee[] {
   });
 }
 
+// Always format in the org timezone so weekdays and clock times stay right
+// for viewers (and CI browsers) outside the UK.
 const DATE_FMT = new Intl.DateTimeFormat("en-GB", {
   weekday: "short",
   day: "numeric",
   month: "short",
+  timeZone: LONDON_TZ,
 });
 const TIME_FMT = new Intl.DateTimeFormat("en-GB", {
   hour: "2-digit",
   minute: "2-digit",
+  timeZone: LONDON_TZ,
 });
 
 /** "Mon 16 Jun · 14:00 to 15:30" — plain, no em-dashes. */

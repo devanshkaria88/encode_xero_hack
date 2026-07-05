@@ -1,4 +1,5 @@
 import {
+  LayoutDashboard,
   Inbox,
   Calendar,
   Users,
@@ -16,9 +17,10 @@ export interface NavItem {
   matchPrefix?: boolean;
 }
 
-/** The first-class surfaces. Tasks inbox is home; Settings sits last. */
+/** The first-class surfaces. Dashboard is home; Settings sits last. */
 export const NAV_ITEMS: NavItem[] = [
-  { label: "Tasks inbox", href: "/", icon: Inbox },
+  { label: "Dashboard", href: "/", icon: LayoutDashboard },
+  { label: "Tasks inbox", href: "/tasks", icon: Inbox, matchPrefix: true },
   { label: "Calendar", href: "/calendar", icon: Calendar, matchPrefix: true },
   { label: "Clients", href: "/clients", icon: Users, matchPrefix: true },
   { label: "Invoices", href: "/invoices", icon: FileText, matchPrefix: true },

@@ -24,7 +24,9 @@ export default function DashboardLayout({
       <div className="flex min-h-screen flex-col lg:pl-64">
         <TopBar />
         <div className="mx-auto w-full max-w-[1200px] flex-1 px-4 py-5 sm:px-6 sm:py-6">
-          <main className="pb-16">{children}</main>
+          {/* Extra bottom padding keeps the last card's figures clear of the
+              floating chat bubble when a page is scrolled to its end. */}
+          <main className="pb-20">{children}</main>
         </div>
       </div>
 

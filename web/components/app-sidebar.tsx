@@ -9,7 +9,7 @@ import { NAV_ITEMS, isActive } from "@/lib/nav";
 import { useApi, type Schemas } from "@/lib/api";
 import { Brand } from "@/components/brand";
 
-/** Left navigation for the five surfaces. Home is the Tasks inbox. */
+/** Left navigation for the first-class surfaces. Home is the Dashboard. */
 export function AppSidebar({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
   // Open-task count powers the inbox badge. Fails quietly — nav still works.
@@ -35,7 +35,7 @@ export function AppSidebar({ onNavigate }: { onNavigate?: () => void }) {
         {NAV_ITEMS.map((item) => {
           const active = isActive(pathname, item);
           const Icon = item.icon;
-          const showCount = item.href === "/" && openTasks > 0;
+          const showCount = item.href === "/tasks" && openTasks > 0;
           return (
             <Link
               key={item.href}

@@ -117,7 +117,7 @@ export function ConnectionsSurface() {
     <div className="space-y-6">
       <PageHeader
         title="Connections"
-        description="The live health of Robyn's links to Xero, your calendar and your inbox. Nothing here is faked — if a link is running on demo data, it says so."
+        description="The live health of Robyn's links to Xero, your calendar and your inbox. Nothing here is faked. If a link is running on demo data, it says so."
         actions={
           <Button
             variant="outline"

@@ -5,7 +5,9 @@
 //
 // Adds over the skill's reference helper: broad->granular scope fallback,
 // tenant-id resolution via GET /connections (cached), retry-on-401 (re-mint),
-// and 429 Retry-After handling.
+// 429 Retry-After handling, and hard timeouts on EVERY outbound fetch — a
+// hung upstream call must fail fast (callers treat it as "Xero unreachable"),
+// never wedge the process.
 
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -13,6 +15,13 @@ import { dirname, join } from 'node:path';
 export const ACCOUNTING_BASE = 'https://api.xero.com/api.xro/2.0';
 const TOKEN_URL = 'https://identity.xero.com/connect/token';
 const CONNECTIONS_URL = 'https://api.xero.com/connections';
+
+// Hard outbound timeouts. Identity/token/connections calls get 10s, the
+// Accounting API 15s. On expiry the fetch aborts and surfaces as a named
+// XeroTimeoutError, which existing callers already handle as "Xero
+// unreachable" (charts fall back to local data, connections shows DOWN).
+const IDENTITY_TIMEOUT_MS = 10_000;
+const API_TIMEOUT_MS = 15_000;
 
 // Project scopes (broad). A custom connection created after 29 Apr 2026 may be
 // granular-only and reject these with 400 invalid_scope — we fall back.
@@ -70,7 +79,7 @@ export function requireEnv(name: string): string {
   const v = process.env[name];
   if (!v || v.trim() === '') {
     throw new Error(
-      `MissingEnv: ${name} is empty — set it in api/.env. An empty Xero client ` +
+      `MissingEnv: ${name} is empty. Set it in api/.env. An empty Xero client ` +
         `id/secret surfaces from the token endpoint as 400 invalid_request.`,
     );
   }
@@ -96,19 +105,68 @@ export class XeroAuthError extends Error {
   }
 }
 
+/** A Xero endpoint did not answer within its budget. Callers treat this the
+ *  same as any other "Xero unreachable" failure. The message reaches the
+ *  connections screen, so it stays plain English. */
+export class XeroTimeoutError extends Error {
+  constructor(what: string, ms: number) {
+    super(`XeroTimeout: ${what} did not respond within ${Math.round(ms / 1000)}s. Treating Xero as unreachable.`);
+    this.name = 'XeroTimeoutError';
+  }
+}
+
+/** Xero 429'd with a Retry-After too long to sleep through. Honouring a
+ *  daily-limit Retry-After (hours) inside a request handler is exactly the
+ *  wedge this file guards against, so we fail fast and let callers degrade
+ *  (charts fall back to local data, connections shows DOWN). */
+export class XeroRateLimitError extends Error {
+  constructor(problem: string, waitMs: number) {
+    super(
+      `XeroRateLimited: the Xero ${problem} API limit is used up. Xero asked us to wait ` +
+        `about ${Math.ceil(waitMs / 60_000)} minute(s) before retrying, so live reads are paused until then.`,
+    );
+    this.name = 'XeroRateLimitError';
+  }
+}
+
+function isAbortError(e: unknown): boolean {
+  const name = (e as { name?: string } | null)?.name ?? '';
+  return name === 'TimeoutError' || name === 'AbortError';
+}
+
+/** fetch with a hard AbortSignal timeout; abort surfaces as XeroTimeoutError. */
+async function fetchWithTimeout(
+  url: string | URL,
+  init: Parameters<typeof fetch>[1],
+  timeoutMs: number,
+  what: string,
+): Promise<Response> {
+  try {
+    return await fetch(url, { ...init, signal: AbortSignal.timeout(timeoutMs) });
+  } catch (e) {
+    if (isAbortError(e)) throw new XeroTimeoutError(what, timeoutMs);
+    throw e;
+  }
+}
+
 async function requestToken(scope: string): Promise<Response> {
   const clientId = requireEnv('XERO_CLIENT_ID');
   const clientSecret = requireEnv('XERO_CLIENT_SECRET');
   const basic = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
-  return fetch(TOKEN_URL, {
-    method: 'POST',
-    headers: {
-      Authorization: `Basic ${basic}`,
-      'Content-Type': 'application/x-www-form-urlencoded',
-      Accept: 'application/json',
+  return fetchWithTimeout(
+    TOKEN_URL,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Basic ${basic}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+        Accept: 'application/json',
+      },
+      body: `grant_type=client_credentials&scope=${encodeURIComponent(scope)}`,
     },
-    body: `grant_type=client_credentials&scope=${encodeURIComponent(scope)}`,
-  });
+    IDENTITY_TIMEOUT_MS,
+    'POST /connect/token',
+  );
 }
 
 /** Mint a token, discovering the scope string the app actually grants. */
@@ -143,37 +201,57 @@ async function mintToken(): Promise<string> {
   throw new XeroAuthError(
     `XeroTokenError: could not obtain an accounting-scoped token. Last response: ` +
       `${lastBody.slice(0, 400)}. If this says invalid_scope, the api/.env creds are ` +
-      `not a Custom Connection with accounting scopes — see HANDOFF.md.`,
+      `not a Custom Connection with accounting scopes (see HANDOFF.md).`,
   );
 }
+
+// Single-flight token mint: concurrent callers share one in-flight request
+// instead of stampeding the token endpoint. The .finally clears the slot on
+// BOTH outcomes, so a rejected or timed-out flight is never cached — the next
+// caller always retries fresh. A poisoned promise must never be reused.
+let inflightMint: Promise<string> | null = null;
 
 export async function getAccessToken(): Promise<string> {
   if (cachedToken && cachedToken.expiresAtMs > Date.now() + 60_000) {
     return cachedToken.token;
   }
-  return mintToken();
+  if (!inflightMint) {
+    inflightMint = mintToken().finally(() => {
+      inflightMint = null;
+    });
+  }
+  return inflightMint;
 }
 
 export function invalidateToken(): void {
   cachedToken = null;
 }
 
-/** Resolve the single-org tenant id (cached). Null for a clean CC that 400s. */
+/** Resolve the single-org tenant id (cached). Null for a clean CC that 400s.
+ *  Only a DEFINITIVE HTTP answer latches the cache — a timeout, network drop
+ *  or token failure returns null WITHOUT caching, so the next caller retries
+ *  fresh instead of inheriting a poisoned resolution. */
 export async function resolveTenant(): Promise<{ id: string; name: string } | null> {
   if (tenantResolved) return tenant;
-  tenantResolved = true;
+  let ok: boolean;
+  let arr: unknown = null;
   try {
     const token = await getAccessToken();
-    const res = await fetch(CONNECTIONS_URL, {
-      headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
-    });
-    if (!res.ok) return null;
-    const arr = (await res.json()) as Array<{ tenantId: string; tenantName: string }>;
-    if (Array.isArray(arr) && arr.length > 0) {
-      tenant = { id: arr[0].tenantId, name: arr[0].tenantName };
-    }
+    const res = await fetchWithTimeout(
+      CONNECTIONS_URL,
+      { headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' } },
+      IDENTITY_TIMEOUT_MS,
+      'GET /connections',
+    );
+    ok = res.ok;
+    arr = ok ? await res.json() : null;
   } catch {
-    tenant = null;
+    return null; // transient failure — never latch it
+  }
+  tenantResolved = true;
+  if (ok && Array.isArray(arr) && arr.length > 0) {
+    const first = arr[0] as { tenantId: string; tenantName: string };
+    tenant = { id: first.tenantId, name: first.tenantName };
   }
   return tenant;
 }
@@ -263,6 +341,10 @@ export interface XeroRequestInit {
 }
 
 const MAX_RETRIES = 3;
+// The longest 429 Retry-After we will actually sleep through (covers the
+// minute-window limit, which is at most ~60s). Anything longer is the daily
+// limit telling us to come back in hours — that throws instead of sleeping.
+const MAX_RATE_LIMIT_WAIT_MS = 60_000;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 export async function xeroRequest(path: string, init: XeroRequestInit = {}): Promise<Response> {
@@ -303,7 +385,12 @@ export async function xeroRequest(path: string, init: XeroRequestInit = {}): Pro
 
   for (let attempt = 0; ; attempt++) {
     headers.Authorization = `Bearer ${await getAccessToken()}`;
-    const res = await fetch(url, { method: init.method ?? 'GET', headers, body });
+    const res = await fetchWithTimeout(
+      url,
+      { method: init.method ?? 'GET', headers, body },
+      API_TIMEOUT_MS,
+      `${init.method ?? 'GET'} ${path}`,
+    );
 
     if (res.status === 401 && attempt < MAX_RETRIES) {
       invalidateToken();
@@ -312,8 +399,14 @@ export async function xeroRequest(path: string, init: XeroRequestInit = {}): Pro
     if (res.status === 429 && attempt < MAX_RETRIES) {
       const retryAfter = Number(res.headers.get('retry-after') ?? '0');
       const waitMs = retryAfter > 0 ? retryAfter * 1000 : 1000;
+      const problem = res.headers.get('x-rate-limit-problem') ?? 'minute';
+      if (waitMs > MAX_RATE_LIMIT_WAIT_MS) {
+        // e.g. the daily limit with Retry-After measured in hours. Sleeping
+        // would hold this request (and everything behind it) hostage.
+        throw new XeroRateLimitError(problem, waitMs);
+      }
       // eslint-disable-next-line no-console
-      console.warn(`[xero] 429 (${res.headers.get('x-rate-limit-problem') ?? '?'}) retry ${waitMs}ms`);
+      console.warn(`[xero] 429 (${problem}) retry ${waitMs}ms`);
       await sleep(waitMs);
       continue;
     }

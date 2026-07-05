@@ -106,6 +106,53 @@ describe('bucketInvoicesOwed (live Xero)', () => {
     }
   });
 
+  it('skips AUTHORISED invoices with nothing left to pay (fully credited or paid down)', () => {
+    const buckets = bucketInvoicesOwed(
+      [
+        invoice({ DueDate: msDate('2026-06-01'), AmountDue: 0, Total: 500 }), // past due but settled
+        invoice({ DueDate: msDate('2026-07-20'), AmountDue: -25, Total: 100 }), // credited past zero
+        invoice({ DueDate: msDate('2026-06-01'), AmountDue: 120 }), // genuinely overdue
+      ],
+      TODAY,
+    );
+    expect(buckets.find((b) => b.key === 'OVERDUE')).toEqual({
+      key: 'OVERDUE',
+      count: 1,
+      amountGbp: 120,
+    });
+    expect(buckets.find((b) => b.key === 'AWAITING')?.count).toBe(0);
+  });
+
+  it('falls back to Total when AmountDue is missing: zero skips, positive counts', () => {
+    const buckets = bucketInvoicesOwed(
+      [
+        invoice({ DueDate: msDate('2026-06-01'), AmountDue: undefined, Total: 0 }),
+        invoice({ DueDate: msDate('2026-06-01'), AmountDue: undefined, Total: 80 }),
+      ],
+      TODAY,
+    );
+    expect(buckets.find((b) => b.key === 'OVERDUE')).toEqual({
+      key: 'OVERDUE',
+      count: 1,
+      amountGbp: 80,
+    });
+  });
+
+  it('still counts DRAFT and SUBMITTED invoices at zero amount (unchanged)', () => {
+    const buckets = bucketInvoicesOwed(
+      [
+        invoice({ Status: 'DRAFT', AmountDue: 0, Total: 0 }),
+        invoice({ Status: 'SUBMITTED', AmountDue: 0, Total: 0 }),
+      ],
+      TODAY,
+    );
+    expect(buckets.find((b) => b.key === 'DRAFT')).toEqual({
+      key: 'DRAFT',
+      count: 2,
+      amountGbp: 0,
+    });
+  });
+
   it('sums AmountDue (not Total) and rounds to 2dp', () => {
     const buckets = bucketInvoicesOwed(
       [

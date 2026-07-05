@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 
 import { post, useApi, useAction, type Schemas } from "@/lib/api";
+import { LONDON_TZ } from "@/lib/calendar-utils";
 import {
   Sheet,
   SheetContent,
@@ -314,6 +315,7 @@ export function ProposalDetailSheet({
                             month: "short",
                             hour: "2-digit",
                             minute: "2-digit",
+                            timeZone: LONDON_TZ,
                           }).format(new Date(meeting.start))}
                           {" · "}
                           {meeting.durationHours}h

@@ -79,7 +79,10 @@ const MONEY_FOUND_STATE_ORDER: DetectionState[] = [
 // Rate-limit discipline: /dashboard/charts costs up to ~6 Xero reads, so the
 // computed payload is cached for 60s — dashboard refreshes never burn the
 // 60/min budget.
-const CHARTS_CACHE_TTL_MS = 60_000;
+// 3 minutes: each rebuild costs up to ~4 live Xero calls and the dashboard
+// polls continuously — a shorter TTL quietly burns the tenant's daily API
+// budget. Post-write refreshes pass fresh=true to bypass.
+const CHARTS_CACHE_TTL_MS = 180_000;
 
 // Pagination guard: at most 3 pages (of 100) per Xero resource per rebuild.
 const CHARTS_MAX_PAGES = 3;
@@ -321,9 +324,12 @@ export class DashboardService {
     };
   }
 
-  // GET /dashboard/charts — the whole chart board in one call, 60s-cached.
-  async charts(): Promise<DashboardChartsDto> {
+  // GET /dashboard/charts — the whole chart board in one call, cached.
+  // `fresh` bypasses the cache: used right after a Xero write so the board
+  // reflects an approval in the same beat instead of up to 3 minutes later.
+  async charts(fresh = false): Promise<DashboardChartsDto> {
     if (
+      !fresh &&
       this.chartsCache &&
       Date.now() - this.chartsCache.atMs < CHARTS_CACHE_TTL_MS
     ) {

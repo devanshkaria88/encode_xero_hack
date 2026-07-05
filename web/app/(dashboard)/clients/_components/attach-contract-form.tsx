@@ -79,7 +79,7 @@ export function AttachContractForm({
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           disabled={isPending}
-          placeholder={`${clientName} — Consulting Agreement`}
+          placeholder={`${clientName} Consulting Agreement`}
           className="w-full rounded-md border border-border bg-card px-3 py-2 text-sm text-foreground outline-none transition-colors duration-fast placeholder:text-muted-foreground/60 focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40 disabled:opacity-60"
         />
       </div>

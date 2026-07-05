@@ -256,7 +256,7 @@ function ProspectCard({
       ) : (
         <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
           <Eye className="h-3.5 w-3.5" />
-          Watching — no action needed yet
+          Watching, no action needed yet
         </div>
       )}
     </Card>

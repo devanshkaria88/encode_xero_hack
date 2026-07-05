@@ -200,7 +200,7 @@ export class MeetingsService {
       await this.audit.record({
         actor: AuditActor.ROBYN,
         action: 'meeting.client_missing',
-        summary: `Matched client ${clientId} no longer exists — cannot build a proposal for "${meeting.title}".`,
+        summary: `Matched client ${clientId} no longer exists. Cannot build a proposal for "${meeting.title}".`,
         subjectType: 'meeting',
         subjectId: meeting.id,
       });
@@ -477,7 +477,7 @@ export class MeetingsService {
     await this.audit.record({
       actor: AuditActor.HUMAN,
       action: 'meeting.transcript_attached',
-      summary: `Transcript attached to "${meeting.title}" — ${parsedCount} scope item(s) parsed.`,
+      summary: `Transcript attached to "${meeting.title}": ${parsedCount} scope item(s) parsed.`,
       subjectType: 'meeting',
       subjectId: meeting.id,
     });
@@ -585,7 +585,7 @@ export class MeetingsService {
         };
       } catch (e) {
         const ics = this.ingestIcsFile();
-        ics.detail = `Google Calendar unavailable (${String(e).slice(0, 120)}) — using .ics fallback. ${ics.detail}`;
+        ics.detail = `Google Calendar unavailable (${String(e).slice(0, 120)}). Using .ics fallback. ${ics.detail}`;
         return ics;
       }
     }
@@ -611,7 +611,7 @@ export class MeetingsService {
       await this.audit.record({
         actor: AuditActor.ROBYN,
         action: 'meeting.cancelled',
-        summary: `Meeting "${m.title}" was cancelled in Google Calendar — skipped.`,
+        summary: `Meeting "${m.title}" was cancelled in Google Calendar and skipped.`,
         subjectType: 'meeting',
         subjectId: m.id,
       });
@@ -817,7 +817,7 @@ export class MeetingsService {
     await this.audit.record({
       actor,
       action: 'task.resolved',
-      summary: `Task resolved: ${task.title} — ${resolution}.`,
+      summary: `Task resolved: ${task.title}. ${resolution}`,
       subjectType: 'task',
       subjectId: task.id,
     });
@@ -942,10 +942,10 @@ export class MeetingsService {
   ): string {
     const prov = built.lines.flatMap((l) => l.provenance.map((p) => `${p.label}: ${p.detail}`));
     const parts = [
-      `Robyn invoice proposal for ${clientName} — ${blockLabel}.`,
+      `Robyn invoice proposal for ${clientName}: ${blockLabel}.`,
       `Lines: ${built.lines.map((l) => l.description).join('; ')}.`,
       `Subtotal ${built.currency} ${built.subtotal}, tax ${built.taxTotal}, total ${built.total}.`,
-      `Provenance — ${prov.join(' | ')}.`,
+      `Provenance: ${prov.join(' | ')}.`,
       `Policy: ${policy.reasons.join(' ')}`,
       auto ? 'Autonomy ON, within terms -> auto-sent.' : 'Autonomy OFF -> human approved.',
     ];
@@ -991,13 +991,13 @@ export class MeetingsService {
   private transitionSummary(meeting: Meeting, state: MeetingState): string {
     switch (state) {
       case MeetingState.SKIPPED:
-        return `Meeting "${meeting.title}" skipped — no external attendees (personal).`;
+        return `Meeting "${meeting.title}" skipped: no external attendees (personal).`;
       case MeetingState.UNKNOWN_ATTENDEE:
-        return `Unknown attendee on "${meeting.title}" — queued to the potential-client pipeline.`;
+        return `Unknown attendee on "${meeting.title}", queued to the potential-client pipeline.`;
       case MeetingState.AWAITING_TRANSCRIPT:
-        return `Meeting "${meeting.title}" is billable but has no transcript — raised PROVIDE_TRANSCRIPT.`;
+        return `Meeting "${meeting.title}" is billable but has no transcript. Raised PROVIDE_TRANSCRIPT.`;
       case MeetingState.TRANSCRIPT_ATTACHED:
-        return `Meeting "${meeting.title}" has a transcript but an ambiguous client — raised CONFIRM_CLIENT_MATCH.`;
+        return `Meeting "${meeting.title}" has a transcript but an ambiguous client. Raised CONFIRM_CLIENT_MATCH.`;
       default:
         return `Meeting "${meeting.title}" -> ${state}.`;
     }

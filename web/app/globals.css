@@ -169,6 +169,18 @@
   }
 }
 
+/*
+ * Viewport-filling pages (the calendar grid) end ~16px above the viewport
+ * bottom. On desktop, where the grid is the last thing on the page, this
+ * swallows the dashboard shell's bottom padding (main pb-20 + wrapper pb-6)
+ * so the page never grows a scrollbar of its own.
+ */
+@media (min-width: 1024px) {
+  .fill-viewport-page {
+    margin-bottom: -6rem;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

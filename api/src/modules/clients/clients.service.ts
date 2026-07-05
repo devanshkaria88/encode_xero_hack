@@ -277,7 +277,7 @@ export class ClientsService {
     await this.resolveTasks(
       TaskType.CONFIRM_AGREEMENT,
       pc.id,
-      `Confirmed — promoted to client ${client.name}.`,
+      `Confirmed. Promoted to client ${client.name}.`,
     );
 
     return {

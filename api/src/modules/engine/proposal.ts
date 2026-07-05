@@ -62,7 +62,7 @@ export function buildProposal(input: BuildProposalInput): BuiltProposal {
     ...rateProvenance(billing),
   ];
   lines.push({
-    description: `Consulting — ${block.label} (${round2(block.durationHours)}h @ ${
+    description: `Consulting, ${block.label} (${round2(block.durationHours)}h @ ${
       billing.rate ?? '?'
     } ${currency}/${unitLabel})`,
     quantity: qty,
@@ -80,7 +80,7 @@ export function buildProposal(input: BuildProposalInput): BuiltProposal {
     hasTranscriptScope = true;
     const amount = round2(item.estHours * hourly);
     lines.push({
-      description: `${item.description} (${round2(item.estHours)}h — extra scope)`,
+      description: `${item.description} (${round2(item.estHours)}h extra scope)`,
       quantity: round2(item.estHours),
       unit_amount: round2(hourly),
       line_amount: amount,

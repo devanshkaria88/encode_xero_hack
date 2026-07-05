@@ -227,7 +227,7 @@ export class GoogleService {
         ConnectionKind.CALENDAR,
         ConnectionStatus.FALLBACK,
         'calendar.ics',
-        'Google disconnected — the next sync reads the seeded .ics fixture.',
+        'Google disconnected. The next sync reads the seeded .ics fixture.',
       );
     }
     if (hadGmail) {
@@ -235,7 +235,7 @@ export class GoogleService {
         ConnectionKind.EMAIL,
         ConnectionStatus.FALLBACK,
         'fixture mailbox',
-        'Google disconnected — the next poll reads the fixture mailbox. Reads only queued client senders.',
+        'Google disconnected. The next poll reads the fixture mailbox. Reads only queued client senders.',
       );
     }
 
@@ -244,7 +244,7 @@ export class GoogleService {
       action: 'google.disconnected',
       summary:
         `Google account ${accountEmail ?? '(email unknown)'} disconnected` +
-        `${revoked ? ' (token revoked)' : ' (revoke failed — best effort)'}. ` +
+        `${revoked ? ' (token revoked)' : ' (revoke failed, best effort)'}. ` +
         'Calendar and email revert to their fixture fallbacks.',
       subjectType: 'connection',
       subjectId: conn.id,

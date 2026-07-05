@@ -12,14 +12,14 @@ export function policyDecision(input: PolicyInput): PolicyResult {
 
   if (!input.autonomyEnabled) {
     auto = false;
-    reasons.push('Autonomy is OFF for this client — everything goes to review.');
+    reasons.push('Autonomy is OFF for this client, so everything goes to review.');
   } else {
     reasons.push('Autonomy is ON for this client.');
   }
 
   if (!input.hasContractOnFile) {
     auto = false;
-    reasons.push('No contract on file — cannot auto-send without a cited rate.');
+    reasons.push('No contract on file. Cannot auto-send without a cited rate.');
   } else {
     reasons.push('Contract on file with a cited rate.');
   }
@@ -44,7 +44,7 @@ export function policyDecision(input: PolicyInput): PolicyResult {
 
   if (input.hasUnreviewedScope) {
     auto = false;
-    reasons.push('Transcript contains extra scope — a human must review it before sending.');
+    reasons.push('Transcript contains extra scope. A human must review it before sending.');
   } else {
     reasons.push('No un-reviewed transcript scope.');
   }

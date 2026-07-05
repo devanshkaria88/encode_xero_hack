@@ -26,11 +26,18 @@ export class ConnectionsService {
     private readonly audit: AuditService,
   ) {}
 
+  // The Xero probe result is cached: two UI elements poll GET /connections at
+  // 60s each, and an uncached probe per poll burns the tenant's daily API
+  // budget (starter tier: 1,000 calls/day). Reads serve the cache; the
+  // explicit recheck endpoint always probes fresh.
+  private xeroProbeCache: { row: ConnectionRowDto; at: number } | null = null;
+  private static readonly XERO_PROBE_TTL_MS = 300_000;
+
   // GET /connections — three rows in a stable order: XERO, CALENDAR, EMAIL.
-  // XERO is probed live (no persistence side effect on a read); CALENDAR/EMAIL
+  // XERO is probed live but rate-limited by the cache above; CALENDAR/EMAIL
   // are read from their ConnectionState rows, defaulting to DOWN if never run.
   async list(): Promise<ConnectionRowDto[]> {
-    const xeroRow = await this.probeXero();
+    const xeroRow = await this.probeXeroCached();
     const calendarRow = await this.readRow(
       ConnectionKind.CALENDAR,
       'Calendar not yet connected. Run a sync to ingest meetings.',
@@ -46,6 +53,7 @@ export class ConnectionsService {
   // XERO ConnectionState row, audit the probe, and return the refreshed row.
   async recheckXero(): Promise<ConnectionRowDto> {
     const row = await this.probeXero();
+    this.xeroProbeCache = { row, at: Date.now() };
 
     // Upsert the XERO ConnectionState row (idempotent by unique `kind`).
     let entity = await this.repo.findOne({ where: { kind: ConnectionKind.XERO } });
@@ -65,12 +73,22 @@ export class ConnectionsService {
       summary:
         row.status === ConnectionStatus.LIVE
           ? `Xero health check: LIVE (${row.label ?? 'org'})`
-          : `Xero health check: DOWN — ${row.detail ?? 'unknown reason'}`,
+          : `Xero health check: DOWN (${row.detail ?? 'unknown reason'})`,
       subjectType: 'ConnectionState',
       subjectId: entity.id,
       inputs: { status: row.status, label: row.label, detail: row.detail },
     });
 
+    return row;
+  }
+
+  private async probeXeroCached(): Promise<ConnectionRowDto> {
+    const cached = this.xeroProbeCache;
+    if (cached && Date.now() - cached.at < ConnectionsService.XERO_PROBE_TTL_MS) {
+      return cached.row;
+    }
+    const row = await this.probeXero();
+    this.xeroProbeCache = { row, at: Date.now() };
     return row;
   }
 
@@ -96,7 +114,7 @@ export class ConnectionsService {
         kind: ConnectionKind.XERO,
         status: ConnectionStatus.DOWN,
         label: h.orgName,
-        detail: h.reason ?? 'Xero not connected — credentials pending.',
+        detail: h.reason ?? 'Xero not connected. Credentials pending.',
         lastSyncAt: null,
         nextPollAt: null,
       };

@@ -54,6 +54,9 @@ export function lastNMonthKeys(now: Date, n: number): string[] {
 // Buckets live ACCREC invoices: DRAFT+SUBMITTED are drafts, AUTHORISED splits
 // on DueDate vs today (due today still counts as awaiting; a missing DueDate
 // is treated as awaiting — never guessed overdue). Owed £ is AmountDue.
+// An AUTHORISED invoice with nothing left to pay (fully credited or paid
+// down, AmountDue <= 0) is skipped entirely — nothing is owed on it, so it
+// belongs in neither count nor amount.
 export function bucketInvoicesOwed(
   invoices: XeroInvoice[],
   today: Date,
@@ -76,6 +79,7 @@ export function bucketInvoicesOwed(
     if (status === 'DRAFT' || status === 'SUBMITTED') {
       key = 'DRAFT';
     } else if (status === 'AUTHORISED') {
+      if (toNumber(inv.AmountDue ?? inv.Total) <= 0) continue; // fully credited/paid down — nothing owed
       const due = parseXeroDate(inv.DueDate);
       key = due && due.getTime() < todayUtcStart ? 'OVERDUE' : 'AWAITING';
     } else {

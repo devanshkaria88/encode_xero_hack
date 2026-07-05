@@ -1,5 +1,5 @@
 import { Controller, Get, Query } from '@nestjs/common';
-import { ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { ApiOkResponse, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { DashboardService } from './dashboard.service';
 import {
   AuditEventDto,
@@ -53,11 +53,17 @@ export class DashboardController {
   @ApiOperation({
     summary: 'Chart board data',
     description:
-      'Everything the chart board needs in one call: invoices owed buckets (draft, awaiting payment, overdue) from live Xero sales invoices, cash received per month for the last 6 months, money Robyn found by detection state, and the unbilled pipeline. Cached for 60 seconds to respect the Xero rate budget. If Xero is unreachable the invoice and cash figures are approximated from local proposals and meta.source reads "local-fallback" — this endpoint never fails because Xero is down.',
+      'Everything the chart board needs in one call: invoices owed buckets (draft, awaiting payment, overdue) from live Xero sales invoices, cash received per month for the last 6 months, money Robyn found by detection state, and the unbilled pipeline. Cached for 3 minutes to respect the Xero daily API budget; pass fresh=true right after a Xero write to bypass the cache. If Xero is unreachable the invoice and cash figures are approximated from local proposals and meta.source reads "local-fallback". This endpoint never fails because Xero is down.',
+  })
+  @ApiQuery({
+    name: 'fresh',
+    required: false,
+    type: Boolean,
+    description: 'Bypass the cache (use after a Xero write).',
   })
   @ApiOkResponse({ type: DashboardChartsDto })
-  charts(): Promise<DashboardChartsDto> {
-    return this.service.charts();
+  charts(@Query('fresh') fresh?: string): Promise<DashboardChartsDto> {
+    return this.service.charts(fresh === 'true' || fresh === '1');
   }
 
   @Get('summary')

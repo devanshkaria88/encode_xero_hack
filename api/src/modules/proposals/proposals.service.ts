@@ -240,7 +240,7 @@ export class ProposalsService {
         actor: authorise ? AuditActor.HUMAN : AuditActor.ROBYN,
         action: authorise ? 'proposal.approved' : 'proposal.saved_draft',
         summary: authorise
-          ? `Approved proposal ${p.reference} for ${client?.name ?? 'client'} — AUTHORISED in Xero (${result.deepLink})`
+          ? `Approved proposal ${p.reference} for ${client?.name ?? 'client'}, AUTHORISED in Xero (${result.deepLink})`
           : `Saved proposal ${p.reference} for ${client?.name ?? 'client'} as a Xero DRAFT (${result.deepLink})`,
         subjectType: 'proposal',
         subjectId: p.id,
@@ -300,7 +300,7 @@ export class ProposalsService {
         subtotal: Number(p.subtotal),
         taxTotal: Number(p.taxTotal),
         total: Number(p.total),
-        message: `Xero write failed — proposal kept in review. ${message}`,
+        message: `Xero write failed. Proposal kept in review. ${message}`,
       };
     }
   }

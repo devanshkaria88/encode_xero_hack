@@ -294,7 +294,7 @@ export function EventSheet({
                   <Separator />
                   <EmptyState
                     title="In the pipeline"
-                    description="This meeting has an unknown attendee. Robyn is watching their email for a yes — confirm it from the Clients pipeline to onboard them."
+                    description="This meeting has an unknown attendee. Robyn is watching their email for a yes. Confirm it from the Clients pipeline to onboard them."
                   />
                 </>
               )}

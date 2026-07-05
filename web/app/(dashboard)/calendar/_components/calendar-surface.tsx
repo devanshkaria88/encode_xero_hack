@@ -34,8 +34,12 @@ type ViewType = "week" | "day";
  */
 const BUFFER_DAYS = 31;
 
-/** Grid height: fills the viewport under the header, never collapses. */
-const GRID_HEIGHT = "h-[calc(100dvh-21rem)] min-h-[480px]";
+/**
+ * Grid height: fills the viewport under the top bar, page header and toolbar
+ * (about 216px of chrome at desktop widths), ending ~16px above the viewport
+ * bottom. Never collapses on short windows.
+ */
+const GRID_HEIGHT = "h-[calc(100dvh-14.5rem)] min-h-[480px]";
 
 // openapi-typescript renders nullable strings as `string | Record<string,never>`.
 function txt(v: unknown): string {
@@ -99,6 +103,23 @@ export function CalendarSurface() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data]);
 
+  // The event nearest to now across the loaded window, for the empty-week
+  // jump. Falls back to the first loaded event when comparisons fail.
+  const nearestEventDate = React.useMemo(() => {
+    if (!data || data.length === 0) return null;
+    const nowMs = Date.now();
+    let nearest = data[0];
+    for (const e of data) {
+      if (
+        Math.abs(+new Date(e.start) - nowMs) <
+        Math.abs(+new Date(nearest.start) - nowMs)
+      ) {
+        nearest = e;
+      }
+    }
+    return new Date(nearest.start);
+  }, [data]);
+
   const gridEvents: GridEvent[] = React.useMemo(
     () =>
       (data ?? []).map((e) => ({
@@ -118,13 +139,23 @@ export function CalendarSurface() {
     [viewType, currentDate],
   );
 
+  // True when the loaded window has events that are not on the visible days,
+  // so an empty week can offer a jump to where the action is.
+  const hasEventsElsewhere = React.useMemo(() => {
+    if (!data || data.length === 0) return false;
+    const dayKeys = new Set(days.map(toDateKey));
+    return data.some((e) => !dayKeys.has(toDateKey(new Date(e.start))));
+  }, [data, days]);
+
   const title =
     viewType === "week" ? getWeekTitle(currentDate) : getDayTitle(currentDate);
   const step = viewType === "week" ? 7 : 1;
   const unit = viewType === "week" ? "week" : "day";
 
   return (
-    <div className="space-y-4">
+    // fill-viewport-page (globals.css) swallows the layout's bottom padding
+    // on desktop so the viewport-sized grid never creates a page scrollbar.
+    <div className="space-y-4 fill-viewport-page">
       {/* Toolbar: Today, joined prev/next, range title, view tabs. */}
       <div className="flex flex-wrap items-center gap-3">
         <Button
@@ -210,6 +241,14 @@ export function CalendarSurface() {
                 viewType === "week"
                   ? "No meetings this week."
                   : "No meetings on this day."
+              }
+              emptyAction={
+                viewType === "week" && hasEventsElsewhere && nearestEventDate
+                  ? {
+                      label: "Go to the demo week",
+                      onClick: () => setCurrentDate(nearestEventDate),
+                    }
+                  : undefined
               }
               className={GRID_HEIGHT}
             />

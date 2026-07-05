@@ -332,7 +332,7 @@ export class EmailService {
     if (status === ConnectionStatus.DOWN) {
       return `IMAP configured for ${cfg.imap.user} but unreachable this poll. Local state kept; no messages read.`;
     }
-    return 'No IMAP credentials — reading the seeded fixture mailbox (seed/data/mailbox). Reads only queued client senders.';
+    return 'No IMAP credentials. Reading the seeded fixture mailbox (seed/data/mailbox). Reads only queued client senders.';
   }
 
   // --- Fixture mailbox reader ----------------------------------------------

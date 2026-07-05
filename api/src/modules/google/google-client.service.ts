@@ -25,6 +25,37 @@ const CALENDAR_WINDOW_PAST_DAYS = 14;
 const CALENDAR_WINDOW_FUTURE_DAYS = 30;
 const MAX_LIST_PAGES = 8; // hard cap so a runaway pagination loop cannot spin
 
+// Hard outbound timeouts: identity operations (token exchange/refresh/revoke,
+// userinfo) get 10s, data reads (calendar, gmail) 15s. Every googleapis call
+// is raced against these so a hung upstream request fails fast through the
+// existing error paths (sync marks syncStatus=ERROR, connection rows go DOWN)
+// instead of wedging the caller forever.
+const GOOGLE_IDENTITY_TIMEOUT_MS = 10_000;
+const GOOGLE_API_TIMEOUT_MS = 15_000;
+
+/** A Google endpoint did not answer within its budget. */
+export class GoogleTimeoutError extends Error {
+  constructor(what: string, ms: number) {
+    super(`GoogleTimeout: ${what} did not respond within ${Math.round(ms / 1000)}s.`);
+    this.name = 'GoogleTimeoutError';
+  }
+}
+
+/** Race a googleapis promise against a hard deadline. The SDK call may keep
+ *  its socket open in the background, but the caller is guaranteed to unblock
+ *  with a named error the existing catch paths already handle. */
+async function withTimeout<T>(promise: Promise<T>, ms: number, what: string): Promise<T> {
+  let timer: NodeJS.Timeout | undefined;
+  const deadline = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new GoogleTimeoutError(what, ms)), ms);
+  });
+  try {
+    return await Promise.race([promise, deadline]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 // Same shape as the meetings pipeline's NormalizedEvent — structural typing
 // lets MeetingsService consume these directly.
 export interface GoogleCalendarEvent {
@@ -142,7 +173,11 @@ export class GoogleClientService {
   /** Auth codes are single-use — never call this twice with the same code. */
   async exchangeCode(code: string): Promise<Record<string, unknown>> {
     const oauth2 = await this.newOAuthClient(true);
-    const { tokens } = await oauth2.getToken(code);
+    const { tokens } = await withTimeout<any>(
+      oauth2.getToken(code),
+      GOOGLE_IDENTITY_TIMEOUT_MS,
+      'Google token exchange',
+    );
     return tokens as Record<string, unknown>;
   }
 
@@ -153,7 +188,11 @@ export class GoogleClientService {
       const oauth2 = await this.newOAuthClient(true);
       oauth2.setCredentials(tokens);
       const userinfo = google.oauth2({ version: 'v2', auth: oauth2 });
-      const res = await userinfo.userinfo.get();
+      const res = await withTimeout<any>(
+        userinfo.userinfo.get(),
+        GOOGLE_IDENTITY_TIMEOUT_MS,
+        'Google userinfo lookup',
+      );
       const email = res?.data?.email;
       if (typeof email === 'string' && email.length > 0) return email;
     } catch (e) {
@@ -210,7 +249,7 @@ export class GoogleClientService {
       const oauth2 = await this.newOAuthClient(false);
       const token = conn.refreshToken ?? conn.accessToken;
       if (!token) return false;
-      await oauth2.revokeToken(token);
+      await withTimeout(oauth2.revokeToken(token), GOOGLE_IDENTITY_TIMEOUT_MS, 'Google token revoke');
       return true;
     } catch (e) {
       this.log.warn(`Google token revoke failed (best-effort): ${String(e).slice(0, 160)}`);
@@ -231,7 +270,7 @@ export class GoogleClientService {
     if (!conn.refreshToken) {
       if (msLeft > 0) return conn; // still valid, just close — use it as-is
       throw new Error(
-        'Google access token expired and no refresh token is stored — reconnect via GET /google/auth-url.',
+        'Google access token expired and no refresh token is stored. Reconnect via GET /google/auth-url.',
       );
     }
     try {
@@ -239,7 +278,11 @@ export class GoogleClientService {
       const cfg = loadConfig();
       const oauth2 = new google.auth.OAuth2(cfg.google.clientId, cfg.google.clientSecret);
       oauth2.setCredentials({ refresh_token: conn.refreshToken });
-      const { credentials } = await oauth2.refreshAccessToken();
+      const { credentials } = await withTimeout<any>(
+        oauth2.refreshAccessToken(),
+        GOOGLE_IDENTITY_TIMEOUT_MS,
+        'Google token refresh',
+      );
       if (typeof credentials.access_token === 'string') {
         conn.accessToken = credentials.access_token;
       }
@@ -362,7 +405,11 @@ export class GoogleClientService {
         params.timeMax = timeMax;
       }
       if (pageToken) params.pageToken = pageToken;
-      const res = await calendar.events.list(params);
+      const res = await withTimeout<any>(
+        calendar.events.list(params),
+        GOOGLE_API_TIMEOUT_MS,
+        'Google Calendar events list',
+      );
       items.push(...(res.data?.items ?? []));
       pageToken = res.data?.nextPageToken ?? undefined;
       if (res.data?.nextSyncToken) nextSyncToken = String(res.data.nextSyncToken);
@@ -396,19 +443,27 @@ export class GoogleClientService {
 
     const fromClause = addrs.length === 1 ? `from:${addrs[0]}` : `from:(${addrs.join(' OR ')})`;
     const q = since ? `${fromClause} after:${Math.floor(since.getTime() / 1000)}` : fromClause;
-    const list = await gmail.users.messages.list({
-      userId: 'me',
-      labelIds: ['INBOX'],
-      q,
-      maxResults: 20,
-    });
+    const list = await withTimeout<any>(
+      gmail.users.messages.list({
+        userId: 'me',
+        labelIds: ['INBOX'],
+        q,
+        maxResults: 20,
+      }),
+      GOOGLE_API_TIMEOUT_MS,
+      'Gmail message list',
+    );
     const ids: string[] = (list.data?.messages ?? [])
       .map((m: any) => String(m?.id ?? ''))
       .filter((id: string) => id.length > 0);
 
     const out: GmailInboundMessage[] = [];
     for (const id of ids) {
-      const msg = await gmail.users.messages.get({ userId: 'me', id, format: 'full' });
+      const msg = await withTimeout<any>(
+        gmail.users.messages.get({ userId: 'me', id, format: 'full' }),
+        GOOGLE_API_TIMEOUT_MS,
+        'Gmail message fetch',
+      );
       const inbound = this.toInboundMessage(msg.data);
       if (inbound) out.push(inbound);
     }
@@ -479,7 +534,7 @@ export class GoogleClientService {
 
   private async requireConnection(): Promise<GoogleConnection> {
     const conn = await this.getConnection();
-    if (!conn) throw new Error('No Google connection — connect via GET /google/auth-url.');
+    if (!conn) throw new Error('No Google connection. Connect via GET /google/auth-url.');
     return conn;
   }
 
@@ -497,7 +552,7 @@ export class GoogleClientService {
     const cfg = loadConfig();
     if (!cfg.google.configured) {
       throw new Error(
-        'Google OAuth is not configured — set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in api/.env.',
+        'Google OAuth is not configured. Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in api/.env.',
       );
     }
     const google = await this.loadGoogle();
@@ -521,10 +576,18 @@ export class GoogleClientService {
     try {
       mod = await dynImport('googleapis');
     } catch {
-      throw new Error('googleapis is not installed — run `pnpm add googleapis` in api/.');
+      throw new Error('googleapis is not installed. Run `pnpm add googleapis` in api/.');
     }
     const google = mod.google ?? mod.default?.google;
     if (!google) throw new Error('googleapis loaded but did not expose `google`.');
+    // Socket-level request timeout for all googleapis data calls (gaxios).
+    // The withTimeout races above still guarantee the caller unblocks even if
+    // the SDK ignores this for a given transport.
+    try {
+      google.options({ timeout: GOOGLE_API_TIMEOUT_MS });
+    } catch {
+      // options() missing on very old googleapis builds; the races still hold
+    }
     this.googleModule = google;
     return google;
   }

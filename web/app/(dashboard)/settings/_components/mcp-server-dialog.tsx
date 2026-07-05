@@ -130,11 +130,18 @@ export function McpServerDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4">
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            void handleSave();
+          }}
+          className="space-y-4"
+        >
           <div>
             <Label htmlFor="mcp-name">Name</Label>
             <Input
               id="mcp-name"
+              name="name"
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="Parts catalogue"
@@ -146,6 +153,7 @@ export function McpServerDialog({
             <Label htmlFor="mcp-url">URL</Label>
             <Input
               id="mcp-url"
+              name="url"
               value={url}
               onChange={(e) => setUrl(e.target.value)}
               placeholder="https://example.com/mcp"
@@ -161,6 +169,7 @@ export function McpServerDialog({
             <Label htmlFor="mcp-token">Auth token</Label>
             <Input
               id="mcp-token"
+              name="authToken"
               type="password"
               autoComplete="off"
               value={token}
@@ -182,6 +191,7 @@ export function McpServerDialog({
             <div className="flex items-center justify-between gap-3">
               <p className="text-sm font-medium">Connection</p>
               <Button
+                type="button"
                 variant="outline"
                 size="sm"
                 onClick={handleTest}
@@ -225,20 +235,24 @@ export function McpServerDialog({
               </p>
             )}
           </div>
-        </div>
-
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose} disabled={save.isPending}>
-            Cancel
-          </Button>
-          <Button onClick={handleSave} disabled={save.isPending}>
-            {save.isPending
-              ? "Saving…"
-              : server
-                ? "Save changes"
-                : "Add server"}
-          </Button>
-        </DialogFooter>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={onClose}
+              disabled={save.isPending}
+            >
+              Cancel
+            </Button>
+            <Button type="submit" disabled={save.isPending}>
+              {save.isPending
+                ? "Saving…"
+                : server
+                  ? "Save changes"
+                  : "Add server"}
+            </Button>
+          </DialogFooter>
+        </form>
       </DialogContent>
     </Dialog>
   );

@@ -520,7 +520,10 @@ export class ChatToolsService {
     const { invoices } = await this.xero.listInvoices(['AUTHORISED', 'SUBMITTED'], input.page ?? 1);
     const today = new Date().toISOString().slice(0, 10);
     const sales = invoices.filter((inv) => inv.Type === 'ACCREC' && Number(inv.AmountDue ?? 0) > 0);
-    const rows = sales.slice(0, 50).map((inv) => {
+    // Totals and count cover EVERY unpaid sale on this page; only the row list
+    // is capped at 50 so the payload stays model-sized. Slicing first would
+    // silently shrink the totals once >50 invoices are unpaid.
+    const all = sales.map((inv) => {
       const dueDate = parseXeroDate(inv.DueDate);
       return {
         invoiceNumber: inv.InvoiceNumber ?? null,
@@ -533,10 +536,12 @@ export class ChatToolsService {
         reference: inv.Reference ?? null,
       };
     });
+    const rows = all.slice(0, 50);
     return {
-      count: rows.length,
-      outstandingGbp: round2(rows.reduce((s, r) => s + r.amountDue, 0)),
-      overdueGbp: round2(rows.filter((r) => r.overdue).reduce((s, r) => s + r.amountDue, 0)),
+      count: all.length,
+      outstandingGbp: round2(all.reduce((s, r) => s + r.amountDue, 0)),
+      overdueGbp: round2(all.filter((r) => r.overdue).reduce((s, r) => s + r.amountDue, 0)),
+      truncated: rows.length < all.length,
       invoices: rows,
     };
   }
@@ -592,7 +597,7 @@ export class ChatToolsService {
     walk(root.Rows ?? []);
     return {
       clientName: client.name,
-      reportTitle: (root.ReportTitles ?? []).join(' — ') || 'Aged Receivables By Contact',
+      reportTitle: (root.ReportTitles ?? []).join(' - ') || 'Aged Receivables By Contact',
       header,
       rows: rows.slice(0, 40),
     };

@@ -514,7 +514,7 @@ export class DetectionsService {
       policyResult: {
         auto: false,
         reasons: [
-          `Ledger detection (${detection.type}) — a human confirms before this is invoiced.`,
+          `Ledger detection (${detection.type}). A human confirms before this is invoiced.`,
         ],
       },
       state: InvoiceProposalState.IN_REVIEW,
