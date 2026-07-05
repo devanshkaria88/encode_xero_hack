@@ -11,6 +11,8 @@ import { EmailService } from './email.service';
   imports: [TypeOrmModule.forFeature([PotentialClient, Task, Client, ConnectionState])],
   providers: [EmailService],
   controllers: [EmailController],
-  exports: [TypeOrmModule],
+  // EmailService is exported for the Google module's Gmail sync, which feeds
+  // messages through the same classify path (queued senders only).
+  exports: [TypeOrmModule, EmailService],
 })
 export class EmailModule {}

@@ -15,6 +15,7 @@ export function buildSwaggerConfig() {
     .addTag('proposals', 'Invoice proposals with line provenance')
     .addTag('detections', 'Ledger detectors (loop 3)')
     .addTag('connections', 'Integration health + check-now')
+    .addTag('google', 'Google OAuth + calendar/gmail sync')
     .addTag('dashboard', 'Aggregate feeds: calendar view, leak strip, audit')
     .addTag('internal', 'Cron jobs exposed as POST /internal/run/:job')
     .build();

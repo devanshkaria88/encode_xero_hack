@@ -39,8 +39,8 @@ import { EngineService } from '../engine/engine.service';
 import { LlmService } from '../llm/llm.service';
 import { XeroService } from '../xero/xero.service';
 import { AuditService } from '../audit/audit.service';
+import { GoogleClientService } from '../google/google-client.service';
 import { EngineClient, MatchKind, ScopeItemInput } from '../engine/types';
-import { loadConfig } from '../../config/env';
 import {
   MeetingListItemDto,
   MeetingDetailDto,
@@ -100,6 +100,7 @@ export class MeetingsService {
     private readonly llm: LlmService,
     private readonly xero: XeroService,
     private readonly audit: AuditService,
+    private readonly googleClient: GoogleClientService,
   ) {}
 
   // =========================================================================
@@ -563,20 +564,24 @@ export class MeetingsService {
   }
 
   // =========================================================================
-  // Calendar ingest — Google read-only if configured, else the .ics fixture.
+  // Calendar ingest — Google OAuth read-only when connected (tokens, refresh
+  // and syncToken live in the Google module), else the .ics fixture.
   // =========================================================================
 
   private async ingestCalendar(): Promise<CalendarIngest> {
-    const cfg = loadConfig();
-    if (cfg.google.configured) {
+    if (await this.googleClient.hasCalendarConnection()) {
       try {
-        const events = await this.loadGoogleEvents();
+        const fetched = await this.googleClient.fetchCalendarEvents();
+        const cancelled = await this.applyCancellations(fetched.cancelledIds);
         return {
-          events,
+          events: fetched.events,
           source: 'google',
           status: ConnectionStatus.LIVE,
-          label: 'Google Calendar',
-          detail: `Live: ${events.length} event(s) via the Google Calendar API.`,
+          label: fetched.accountEmail ?? 'Google Calendar',
+          detail:
+            `Live: ${fetched.events.length} event(s) via the Google Calendar API ` +
+            `(${fetched.mode} sync)` +
+            (cancelled ? `, ${cancelled} cancellation(s) applied.` : '.'),
         };
       } catch (e) {
         const ics = this.ingestIcsFile();
@@ -585,6 +590,34 @@ export class MeetingsService {
       }
     }
     return this.ingestIcsFile();
+  }
+
+  /**
+   * Events cancelled in Google Calendar are soft-handled: the meeting flips to
+   * SKIPPED (the not-billable terminal) with any open transcript/match task
+   * resolved. SENT meetings are left alone — the invoice already exists and
+   * unwinding it is a human decision, not a sync side effect.
+   */
+  private async applyCancellations(gcalEventIds: string[]): Promise<number> {
+    let applied = 0;
+    for (const gcalEventId of gcalEventIds) {
+      const m = await this.meetingRepo.findOne({ where: { gcalEventId } });
+      if (!m || m.state === MeetingState.SKIPPED || m.state === MeetingState.SENT) continue;
+      m.state = MeetingState.SKIPPED;
+      m.skipReason = 'Cancelled in Google Calendar';
+      await this.meetingRepo.save(m);
+      await this.resolveTask(TaskType.PROVIDE_TRANSCRIPT, m.id, m.skipReason, AuditActor.ROBYN);
+      await this.resolveTask(TaskType.CONFIRM_CLIENT_MATCH, m.id, m.skipReason, AuditActor.ROBYN);
+      await this.audit.record({
+        actor: AuditActor.ROBYN,
+        action: 'meeting.cancelled',
+        summary: `Meeting "${m.title}" was cancelled in Google Calendar — skipped.`,
+        subjectType: 'meeting',
+        subjectId: m.id,
+      });
+      applied++;
+    }
+    return applied;
   }
 
   private ingestIcsFile(): CalendarIngest {
@@ -669,58 +702,6 @@ export class MeetingsService {
     else push(at);
     push(ev.organizer, true);
     return out;
-  }
-
-  private async loadGoogleEvents(): Promise<NormalizedEvent[]> {
-    const accessToken = process.env.GOOGLE_ACCESS_TOKEN;
-    const refreshToken = process.env.GOOGLE_REFRESH_TOKEN;
-    if (!accessToken && !refreshToken) {
-      throw new Error('No Google OAuth token available (set GOOGLE_ACCESS_TOKEN / GOOGLE_REFRESH_TOKEN)');
-    }
-    // Dynamic import so the build stays green even when googleapis is absent
-    // (the .ics fallback is the demo path). The Function indirection stops
-    // TypeScript from statically resolving the optional dependency.
-    const dynImport = new Function('m', 'return import(m)') as unknown as (m: string) => Promise<any>;
-    const mod = await dynImport('googleapis');
-    const google = mod.google ?? mod.default?.google;
-    const cfg = loadConfig();
-    const oauth2 = new google.auth.OAuth2(cfg.google.clientId, cfg.google.clientSecret);
-    oauth2.setCredentials({ access_token: accessToken, refresh_token: refreshToken });
-    const calendar = google.calendar({ version: 'v3', auth: oauth2 });
-    const calId = process.env.GOOGLE_CALENDAR_ID ?? 'primary';
-    const now = new Date();
-    const timeMin = new Date(now.getFullYear(), now.getMonth() - 2, 1).toISOString();
-    const timeMax = new Date(now.getFullYear(), now.getMonth() + 2, 1).toISOString();
-    const res = await calendar.events.list({
-      calendarId: calId,
-      timeMin,
-      timeMax,
-      singleEvents: true,
-      orderBy: 'startTime',
-      maxResults: 250,
-    });
-    const items: any[] = res.data.items ?? [];
-    return items
-      .filter((it) => it.start)
-      .map((it) => {
-        const start = new Date(it.start.dateTime ?? it.start.date);
-        const end = new Date(it.end?.dateTime ?? it.end?.date ?? start);
-        const attendees: MeetingAttendee[] = (it.attendees ?? []).map((a: any) => ({
-          email: a.email,
-          name: a.displayName,
-          organizer: !!a.organizer,
-        }));
-        if (it.organizer?.email && !attendees.some((x) => x.email?.toLowerCase() === it.organizer.email.toLowerCase())) {
-          attendees.push({ email: it.organizer.email, name: it.organizer.displayName, organizer: true });
-        }
-        return {
-          gcalEventId: String(it.id),
-          title: String(it.summary ?? 'Untitled meeting'),
-          start,
-          end,
-          attendees,
-        };
-      });
   }
 
   private async upsertMeetings(events: NormalizedEvent[], source: string): Promise<{ imported: number; updated: number }> {

@@ -22,9 +22,10 @@ import { AuditService } from '../audit/audit.service';
 import { loadConfig } from '../../config/env';
 import { EmailPollResultDto, DetectedAgreementDto } from './dto/email-poll.dto';
 
-// A normalised inbound message — the same shape whether it came from live IMAP
-// or the fixture mailbox, so the classify path never branches on source.
-interface InboundMessage {
+// A normalised inbound message — the same shape whether it came from live
+// IMAP, the fixture mailbox or the Gmail sync (Google module), so the classify
+// path never branches on source.
+export interface InboundMessage {
   from: string;
   subject: string;
   body: string;
@@ -118,84 +119,10 @@ export class EmailService {
 
       messagesRead += msgs.length;
 
-      for (const m of msgs) {
-        let cls;
-        try {
-          cls = await this.llm.classifyAgreement(m.from, m.subject, m.body);
-        } catch (err) {
-          const reason = err instanceof Error ? err.message : String(err);
-          this.log.warn(`Agreement classification failed for ${pc.id}: ${reason}`);
-          await this.audit.record({
-            actor: AuditActor.LLM,
-            action: 'email.classify_error',
-            summary: `Agreement classification failed for ${pc.displayName}: ${reason.slice(0, 200)}`,
-            subjectType: 'potential_client',
-            subjectId: pc.id,
-            inputs: { from: m.from, subject: m.subject },
-          });
-          continue; // never guess — skip this message
-        }
-
-        if (!cls.agreement) {
-          await this.audit.record({
-            actor: AuditActor.LLM,
-            action: 'email.classified_no_agreement',
-            summary: `No agreement in message from ${pc.displayName} ("${m.subject}").`,
-            subjectType: 'potential_client',
-            subjectId: pc.id,
-            inputs: { from: m.from, subject: m.subject, reasoning: cls.reasoning },
-          });
-          continue;
-        }
-
-        // Agreement detected — the money-adjacent transition. Record evidence,
-        // flip state, raise the confirm task (idempotent), audit both edges.
-        const quote =
-          cls.evidence_quote && cls.evidence_quote.trim().length > 0
-            ? cls.evidence_quote.trim()
-            : m.subject || 'Agreement indicated in email';
-        const evidence: AgreementEvidence = {
-          email_msg_id: m.messageId,
-          quote,
-          from: m.from,
-          subject: m.subject,
-          received_at: m.date ?? now.toISOString(),
-        };
-
-        pc.state = PotentialClientState.AGREEMENT_DETECTED;
-        pc.evidence = evidence;
-        await this.pcRepo.save(pc);
-        agreementsDetected += 1;
-
-        await this.audit.record({
-          actor: AuditActor.ROBYN,
-          action: 'email.agreement_detected',
-          summary: `Agreement detected from ${pc.displayName}: "${quote}"`,
-          subjectType: 'potential_client',
-          subjectId: pc.id,
-          inputs: {
-            from: m.from,
-            subject: m.subject,
-            quote,
-            reasoning: cls.reasoning,
-            mode,
-          },
-        });
-
-        const taskId = await this.raiseConfirmAgreementTask(pc, evidence);
-        if (taskId) tasksRaised += 1;
-
-        detected.push({
-          potentialClientId: pc.id,
-          displayName: pc.displayName,
-          from: m.from,
-          subject: m.subject,
-          quote,
-          taskId: taskId ?? undefined,
-        });
-
-        break; // one agreement per potential client is enough
-      }
+      const res = await this.processInboundMessages(pc, msgs, mode);
+      agreementsDetected += res.agreementsDetected;
+      tasksRaised += res.tasksRaised;
+      detected.push(...res.detected);
 
       pc.lastPolledAt = now;
       await this.pcRepo.save(pc);
@@ -231,6 +158,104 @@ export class EmailService {
       polledAt: now.toISOString(),
       nextPollAt: nextPollAt.toISOString(),
     };
+  }
+
+  // --- Shared classify path --------------------------------------------------
+  // Used by the IMAP/fixture poll above AND by the Gmail sync in the Google
+  // module, so every inbound message is judged by the exact same rules:
+  // classify via the LLM edge (never guess on failure), and on agreement flip
+  // the PotentialClient, raise the CONFIRM_AGREEMENT task idempotently and
+  // audit both edges. Callers own the queued-sender filter and lastPolledAt.
+  async processInboundMessages(
+    pc: PotentialClient,
+    msgs: InboundMessage[],
+    mode: ConnectionStatus,
+  ): Promise<{ agreementsDetected: number; tasksRaised: number; detected: DetectedAgreementDto[] }> {
+    const now = new Date();
+    let agreementsDetected = 0;
+    let tasksRaised = 0;
+    const detected: DetectedAgreementDto[] = [];
+
+    for (const m of msgs) {
+      let cls;
+      try {
+        cls = await this.llm.classifyAgreement(m.from, m.subject, m.body);
+      } catch (err) {
+        const reason = err instanceof Error ? err.message : String(err);
+        this.log.warn(`Agreement classification failed for ${pc.id}: ${reason}`);
+        await this.audit.record({
+          actor: AuditActor.LLM,
+          action: 'email.classify_error',
+          summary: `Agreement classification failed for ${pc.displayName}: ${reason.slice(0, 200)}`,
+          subjectType: 'potential_client',
+          subjectId: pc.id,
+          inputs: { from: m.from, subject: m.subject },
+        });
+        continue; // never guess — skip this message
+      }
+
+      if (!cls.agreement) {
+        await this.audit.record({
+          actor: AuditActor.LLM,
+          action: 'email.classified_no_agreement',
+          summary: `No agreement in message from ${pc.displayName} ("${m.subject}").`,
+          subjectType: 'potential_client',
+          subjectId: pc.id,
+          inputs: { from: m.from, subject: m.subject, reasoning: cls.reasoning },
+        });
+        continue;
+      }
+
+      // Agreement detected — the money-adjacent transition. Record evidence,
+      // flip state, raise the confirm task (idempotent), audit both edges.
+      const quote =
+        cls.evidence_quote && cls.evidence_quote.trim().length > 0
+          ? cls.evidence_quote.trim()
+          : m.subject || 'Agreement indicated in email';
+      const evidence: AgreementEvidence = {
+        email_msg_id: m.messageId,
+        quote,
+        from: m.from,
+        subject: m.subject,
+        received_at: m.date ?? now.toISOString(),
+      };
+
+      pc.state = PotentialClientState.AGREEMENT_DETECTED;
+      pc.evidence = evidence;
+      await this.pcRepo.save(pc);
+      agreementsDetected += 1;
+
+      await this.audit.record({
+        actor: AuditActor.ROBYN,
+        action: 'email.agreement_detected',
+        summary: `Agreement detected from ${pc.displayName}: "${quote}"`,
+        subjectType: 'potential_client',
+        subjectId: pc.id,
+        inputs: {
+          from: m.from,
+          subject: m.subject,
+          quote,
+          reasoning: cls.reasoning,
+          mode,
+        },
+      });
+
+      const taskId = await this.raiseConfirmAgreementTask(pc, evidence);
+      if (taskId) tasksRaised += 1;
+
+      detected.push({
+        potentialClientId: pc.id,
+        displayName: pc.displayName,
+        from: m.from,
+        subject: m.subject,
+        quote,
+        taskId: taskId ?? undefined,
+      });
+
+      break; // one agreement per potential client is enough
+    }
+
+    return { agreementsDetected, tasksRaised, detected };
   }
 
   // --- Task raise (idempotent by dedupeKey) --------------------------------
@@ -446,7 +471,9 @@ export class EmailService {
   }
 
   // --- helpers --------------------------------------------------------------
-  private normaliseAddress(raw: string): string {
+  // Public: the Google module normalises queued-sender addresses with the same
+  // rule before building its Gmail query.
+  normaliseAddress(raw: string): string {
     if (!raw) return '';
     const angled = raw.match(/<([^>]+)>/);
     const addr = angled ? angled[1] : raw;
