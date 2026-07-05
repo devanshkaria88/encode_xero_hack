@@ -659,6 +659,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/dashboard/charts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Chart board data
+         * @description Everything the chart board needs in one call: invoices owed buckets (draft, awaiting payment, overdue) from live Xero sales invoices, cash received per month for the last 6 months, money Robyn found by detection state, and the unbilled pipeline. Cached for 60 seconds to respect the Xero rate budget. If Xero is unreachable the invoice and cash figures are approximated from local proposals and meta.source reads "local-fallback" — this endpoint never fails because Xero is down.
+         */
+        get: operations["DashboardController_charts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/dashboard/summary": {
         parameters: {
             query?: never;
@@ -671,6 +691,190 @@ export interface paths {
          * @description Open tasks, total unbilled £ across clients, invoices sent this month, and client count.
          */
         get: operations["DashboardController_summary"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/google/auth-url": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Start the Google OAuth flow
+         * @description Returns the consent screen URL (calendar.readonly + gmail.readonly + userinfo.email, offline access, forced consent). The state nonce is held server-side and checked on the callback.
+         */
+        get: operations["GoogleController_authUrl"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/google/callback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * OAuth callback (code exchange)
+         * @description Exchanges the single-use code, stores tokens + granted scopes + account email, then immediately triggers the first sync in the background. Idempotent: re-hitting with a used code or unknown state while a connection exists returns success. Unguarded by design — Google redirects the browser here with no bearer token.
+         */
+        get: operations["GoogleController_callback"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/google/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Google connection status
+         * @description Connection, account email, granted scopes and per-scope grants (calendar/gmail), last sync time and sync status. Safe to poll while the post-connect sync runs.
+         */
+        get: operations["GoogleController_status"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/google/sync": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Sync Google now
+         * @description Runs the calendar sync (events feed the existing meetings pipeline) and the Gmail poll (queued potential-client senders only) for whichever scopes were granted, and returns counts.
+         */
+        post: operations["GoogleController_sync"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/google/connection": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Disconnect Google
+         * @description Best-effort token revoke, deletes the stored connection and reverts the CALENDAR/EMAIL connection rows to their honest fixture fallbacks. Idempotent.
+         */
+        delete: operations["GoogleController_disconnect"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/agent-settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get agent settings
+         * @description The chat agent configuration: system prompt, model, web search toggle, skills and MCP servers. Seeded with defaults on first read. MCP auth tokens are masked to the boolean authConfigured — secrets are never returned.
+         */
+        get: operations["AgentSettingsController_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update agent settings
+         * @description Partial update. skills and mcpServers are replaced wholesale when provided; an MCP server that keeps its id keeps its stored token unless a new one (or null, to clear) is sent. Every change writes an AuditEvent naming the changed fields.
+         */
+        patch: operations["AgentSettingsController_update"];
+        trace?: never;
+    };
+    "/agent-settings/mcp/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Test an MCP server connection
+         * @description Attempts an MCP streamable-HTTP handshake (JSON-RPC initialize, then tools/list) against the given URL with a 5s budget. Nothing is persisted; the token is never logged or echoed. Returns the discovered tools on success.
+         */
+        post: operations["AgentSettingsController_testMcp"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/chat": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Chat with Robyn (SSE stream)
+         * @description Streams the agent's reply as Server-Sent Events. Each event is a JSON object on a `data:` line: {type:'text',delta}, {type:'tool',name,status:'running'|'done'|'error'}, {type:'error',message}, and a final {type:'done'}. The server is stateless — send the full history each time. The agent is strictly read-only: it consults live data but never writes to Xero or resolves tasks.
+         */
+        post: operations["ChatController_chatStream"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/chat/starters": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Suggested chat questions
+         * @description Four canned questions computed cheaply from live data (leak totals, open task count) for the empty chat state.
+         */
+        get: operations["ChatController_starters"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1618,6 +1822,94 @@ export interface components {
             /** @description Per-source breakdown that sums to recoverableGbp. */
             breakdown: components["schemas"]["LeakBreakdownDto"][];
         };
+        InvoicesOwedBucketDto: {
+            /**
+             * @description Bucket key. DRAFT = draft+submitted invoices, AWAITING = authorised and not yet due (or no due date), OVERDUE = authorised and past due.
+             * @enum {string}
+             */
+            key: "DRAFT" | "AWAITING" | "OVERDUE";
+            /**
+             * @description Number of invoices in this bucket.
+             * @example 3
+             */
+            count: number;
+            /**
+             * @description Amount still owed in this bucket (GBP, 2dp) — sum of AmountDue.
+             * @example 1440
+             */
+            amountGbp: number;
+        };
+        CashInMonthDto: {
+            /**
+             * @description Calendar month key.
+             * @example 2026-02
+             */
+            month: string;
+            /**
+             * @description Payments received against sales invoices that month (GBP, 2dp).
+             * @example 960
+             */
+            amountGbp: number;
+        };
+        CashInDto: {
+            /** @description Last 6 calendar months (oldest first, current month included), zero-filled so every month has a bar. */
+            months: components["schemas"]["CashInMonthDto"][];
+            /**
+             * @description Total received across the 6 months (GBP, 2dp).
+             * @example 5760
+             */
+            total6m: number;
+        };
+        MoneyFoundBucketDto: {
+            /**
+             * @description Detection lifecycle state this bucket counts.
+             * @enum {string}
+             */
+            state: "OPEN" | "PROPOSED" | "RESOLVED" | "DISMISSED";
+            /**
+             * @description Number of detections in this state.
+             * @example 2
+             */
+            count: number;
+            /**
+             * @description Total value Robyn found in this state (GBP, 2dp).
+             * @example 2880
+             */
+            amountGbp: number;
+        };
+        UnbilledPipelineDto: {
+            /** @description Per-source unbilled pipeline (same computation as the leak strip): open detections, invoices in review, unbilled meetings. */
+            items: components["schemas"]["LeakBreakdownDto"][];
+            /**
+             * @description Total unbilled pipeline (GBP, 2dp) — sums the items.
+             * @example 3555
+             */
+            totalGbp: number;
+        };
+        ChartsMetaDto: {
+            /**
+             * @description Where the invoice/cash figures came from: "xero-live" for live Xero reads, "local-fallback" for the local proposal approximation when Xero is unreachable.
+             * @enum {string}
+             */
+            source: "xero-live" | "local-fallback";
+            /**
+             * @description When this payload was computed (ISO datetime). Cached for up to 60 seconds.
+             * @example 2026-07-04T12:00:00.000Z
+             */
+            generatedAt: string;
+        };
+        DashboardChartsDto: {
+            /** @description Invoices owed buckets from live Xero ACCREC invoices (or local proposals on fallback). Always all three keys in DRAFT, AWAITING, OVERDUE order. */
+            invoicesOwed: components["schemas"]["InvoicesOwedBucketDto"][];
+            /** @description Cash received per month over the last 6 calendar months. */
+            cashIn: components["schemas"]["CashInDto"];
+            /** @description Money Robyn found, bucketed by detection state (all states present: OPEN, PROPOSED, RESOLVED, DISMISSED) so recovered vs pending vs dismissed can be shown. */
+            moneyFound: components["schemas"]["MoneyFoundBucketDto"][];
+            /** @description The unbilled pipeline — the leak-strip breakdown reshaped for charting. */
+            unbilledPipeline: components["schemas"]["UnbilledPipelineDto"];
+            /** @description Data provenance and freshness. */
+            meta: components["schemas"]["ChartsMetaDto"];
+        };
         DashboardSummaryDto: {
             /**
              * @description Number of OPEN tasks in the inbox.
@@ -1639,6 +1931,207 @@ export interface components {
              * @example 3
              */
             clientsCount: number;
+        };
+        GoogleAuthUrlDto: {
+            /** @description Google consent screen URL. Open it in the browser; Google redirects back to the registered callback. */
+            url: string;
+        };
+        GoogleCallbackResultDto: {
+            /** @description True once a Google connection is stored. */
+            connected: boolean;
+            /** @example devansh88karia@gmail.com */
+            accountEmail?: Record<string, never> | null;
+            /** @description The scopes the user actually granted (they can untick any on the consent screen). */
+            grantedScopes: string[];
+        };
+        /** @enum {string} */
+        GoogleSyncStatus: "PENDING" | "SYNCING" | "OK" | "ERROR";
+        GoogleScopeGrantDto: {
+            /** @description Whether this scope was granted on the consent screen. */
+            granted: boolean;
+        };
+        GoogleStatusDto: {
+            connected: boolean;
+            accountEmail?: Record<string, never> | null;
+            grantedScopes: string[];
+            /** @description ISO timestamp of the last finished sync. */
+            lastSyncAt?: Record<string, never> | null;
+            syncStatus?: components["schemas"]["GoogleSyncStatus"] | null;
+            /** @description Why the last sync failed, if it did. */
+            syncError?: Record<string, never> | null;
+            calendar: components["schemas"]["GoogleScopeGrantDto"];
+            gmail: components["schemas"]["GoogleScopeGrantDto"];
+        };
+        GoogleCalendarSyncDto: {
+            /** @description True when events came from Google this run (not a fallback). */
+            synced: boolean;
+            /** @description New meetings created. */
+            imported: number;
+            /** @description Existing meetings refreshed. */
+            updated: number;
+            /** @description Meetings the Loop-1 step ran on. */
+            processed: number;
+        };
+        GoogleGmailSyncDto: {
+            /** @description True when the Gmail INBOX was polled this run (scope granted). */
+            synced: boolean;
+            /** @description Messages read — queued potential-client senders only. */
+            messagesRead: number;
+            /** @description Potential clients moved to AGREEMENT_DETECTED. */
+            agreementsDetected: number;
+            /** @description New CONFIRM_AGREEMENT tasks raised. */
+            tasksRaised: number;
+        };
+        GoogleSyncResultDto: {
+            calendar: components["schemas"]["GoogleCalendarSyncDto"];
+            gmail: components["schemas"]["GoogleGmailSyncDto"];
+            syncStatus: components["schemas"]["GoogleSyncStatus"];
+            syncError?: Record<string, never> | null;
+            /** @description ISO timestamp of this sync. */
+            lastSyncAt: string;
+        };
+        GoogleDisconnectResultDto: {
+            /** @description The connection row is gone (idempotent — true even if none existed). */
+            disconnected: boolean;
+            /** @description Whether the best-effort Google token revoke succeeded. */
+            revoked: boolean;
+        };
+        McpServerDto: {
+            /** @description Stable server id (assigned on create). */
+            id: string;
+            /** @description Display name; also used as the MCP server name on the Anthropic API. */
+            name: string;
+            /** @description Streamable-HTTP MCP endpoint URL. */
+            url: string;
+            /** @description True when a bearer token is stored for this server. The token itself is never returned. */
+            authConfigured: boolean;
+            /** @description Whether the chat agent may use this server. */
+            enabled: boolean;
+        };
+        SkillDto: {
+            /** @description Stable skill id (assigned on create). */
+            id: string;
+            /** @description Skill name, shown as a named section header in the system prompt. */
+            name: string;
+            /** @description Instruction text appended to the system prompt when enabled. */
+            instructions: string;
+            /** @description Whether this skill is appended to the system prompt. */
+            enabled: boolean;
+        };
+        AgentSettingsDto: {
+            /**
+             * Format: uuid
+             * @description Settings row id.
+             */
+            id: string;
+            /** @description The editable system prompt for Robyn chat. */
+            systemPrompt: string;
+            /**
+             * @description Anthropic model used for chat.
+             * @example claude-sonnet-5
+             * @enum {string}
+             */
+            model: "claude-sonnet-5" | "claude-opus-4-8" | "claude-haiku-4-5";
+            /** @description Whether Anthropic's server-side web search tool is enabled. */
+            webSearchEnabled: boolean;
+            /** @description User-added MCP servers (tokens masked). */
+            mcpServers: components["schemas"]["McpServerDto"][];
+            /** @description Named instruction snippets for the system prompt. */
+            skills: components["schemas"]["SkillDto"][];
+            /** @description Last update time (ISO datetime). */
+            updatedAt: string;
+        };
+        McpServerInputDto: {
+            /** @description Existing server id. Include it to update in place and keep the stored token. */
+            id?: string;
+            /** @description Display name. */
+            name: string;
+            /** @description Streamable-HTTP MCP endpoint URL (http/https). */
+            url: string;
+            /** @description Bearer token for the server. Omit or send "" to keep the stored token; send null to clear it. Never returned in responses. */
+            authToken?: Record<string, never> | null;
+            /** @description Whether the chat agent may use this server. */
+            enabled: boolean;
+        };
+        SkillInputDto: {
+            /** @description Existing skill id. Include it to update in place. */
+            id?: string;
+            /** @description Skill name. */
+            name: string;
+            /** @description Instruction text appended to the system prompt when enabled. */
+            instructions: string;
+            /** @description Whether this skill is active. */
+            enabled: boolean;
+        };
+        UpdateAgentSettingsDto: {
+            /** @description Replacement system prompt. */
+            systemPrompt?: string;
+            /**
+             * @description Anthropic model for chat.
+             * @enum {string}
+             */
+            model?: "claude-sonnet-5" | "claude-opus-4-8" | "claude-haiku-4-5";
+            /** @description Toggle the server-side web search tool. */
+            webSearchEnabled?: boolean;
+            /** @description Full replacement list of MCP servers. Servers that keep their id keep their stored token unless a new one is provided. */
+            mcpServers?: components["schemas"]["McpServerInputDto"][];
+            /** @description Full replacement list of skills. */
+            skills?: components["schemas"]["SkillInputDto"][];
+        };
+        McpTestRequestDto: {
+            /** @description Streamable-HTTP MCP endpoint URL to probe (nothing is persisted). */
+            url: string;
+            /** @description Bearer token to probe with. Never persisted or logged. */
+            authToken?: string;
+        };
+        McpTestToolDto: {
+            /** @description Tool name reported by the server. */
+            name: string;
+            /** @description Tool description reported by the server. */
+            description: string | null;
+        };
+        McpTestResponseDto: {
+            /** @description True when initialize + tools/list both succeeded. */
+            ok: boolean;
+            /** @description Tools discovered on the server (empty on failure). */
+            tools: components["schemas"]["McpTestToolDto"][];
+            /** @description Human-readable failure reason, or null on success. */
+            error: string | null;
+        };
+        ChatMessageDto: {
+            /**
+             * @description Who said it.
+             * @enum {string}
+             */
+            role: "user" | "assistant";
+            /** @description Plain-text message content. */
+            content: string;
+        };
+        ChatRequestDto: {
+            /** @description Full conversation history, oldest first, ending with the latest user message. The server is stateless — the client keeps history. */
+            messages: components["schemas"]["ChatMessageDto"][];
+        };
+        ChatSseEventDto: {
+            /**
+             * @description Event discriminator. 'text' carries a delta; 'tool' carries name+status ('running'|'done'|'error'); 'error' carries message; 'done' ends the stream.
+             * @enum {string}
+             */
+            type: "text" | "tool" | "done" | "error";
+            /** @description Text delta (type='text'). */
+            delta?: string;
+            /** @description Tool name (type='tool'). */
+            name?: string;
+            /**
+             * @description Tool status (type='tool').
+             * @enum {string}
+             */
+            status?: "running" | "done" | "error";
+            /** @description Error message (type='error'). */
+            message?: string;
+        };
+        ChatStartersDto: {
+            /** @description Four suggested questions computed from live data, for the empty chat state. */
+            starters: string[];
         };
     };
     responses: never;
@@ -2391,6 +2884,25 @@ export interface operations {
             };
         };
     };
+    DashboardController_charts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DashboardChartsDto"];
+                };
+            };
+        };
+    };
     DashboardController_summary: {
         parameters: {
             query?: never;
@@ -2406,6 +2918,244 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DashboardSummaryDto"];
+                };
+            };
+        };
+    };
+    GoogleController_authUrl: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GoogleAuthUrlDto"];
+                };
+            };
+            /** @description GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET not configured. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    GoogleController_callback: {
+        parameters: {
+            query?: {
+                /** @description Single-use authorization code from Google. */
+                code?: string;
+                /** @description State nonce issued by GET /google/auth-url. */
+                state?: string;
+                /** @description Error code when the user cancelled the consent screen. */
+                error?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GoogleCallbackResultDto"];
+                };
+            };
+            /** @description Consent cancelled or code exchange failed with no existing connection. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    GoogleController_status: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GoogleStatusDto"];
+                };
+            };
+        };
+    };
+    GoogleController_sync: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GoogleSyncResultDto"];
+                };
+            };
+            /** @description No Google connection. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    GoogleController_disconnect: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GoogleDisconnectResultDto"];
+                };
+            };
+        };
+    };
+    AgentSettingsController_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentSettingsDto"];
+                };
+            };
+        };
+    };
+    AgentSettingsController_update: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateAgentSettingsDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentSettingsDto"];
+                };
+            };
+        };
+    };
+    AgentSettingsController_testMcp: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["McpTestRequestDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["McpTestResponseDto"];
+                };
+            };
+        };
+    };
+    ChatController_chatStream: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChatRequestDto"];
+            };
+        };
+        responses: {
+            /** @description text/event-stream of ChatSseEventDto-shaped JSON events (not a single JSON body). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/event-stream": components["schemas"]["ChatSseEventDto"];
+                };
+            };
+            /** @description Malformed chat history. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ChatController_starters: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChatStartersDto"];
                 };
             };
         };

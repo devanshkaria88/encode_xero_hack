@@ -162,6 +162,21 @@ export class GoogleClientService {
     return this.emailFromIdToken(tokens?.id_token as string | undefined);
   }
 
+  /** Decode the id_token JWT payload locally — no network, no verification
+   *  needed (we only display the email; nothing authorizes against it). */
+  private emailFromIdToken(idToken?: string): string | null {
+    if (!idToken) return null;
+    try {
+      const payload = idToken.split('.')[1] ?? '';
+      const json = JSON.parse(
+        Buffer.from(payload.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8'),
+      ) as { email?: unknown };
+      return typeof json.email === 'string' && json.email.length > 0 ? json.email : null;
+    } catch {
+      return null;
+    }
+  }
+
   /**
    * Upsert the single connection row from a token response. Resets the
    * calendar syncToken (a reconnect always starts with a clean full sync) and

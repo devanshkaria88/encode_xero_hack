@@ -17,6 +17,8 @@ import { DetectionsModule } from './modules/detections/detections.module';
 import { TasksModule } from './modules/tasks/tasks.module';
 import { ConnectionsModule } from './modules/connections/connections.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
+import { GoogleModule } from './modules/google/google.module';
+import { ChatModule } from './modules/chat/chat.module';
 import { HealthModule } from './modules/health/health.module';
 
 @Module({
@@ -48,6 +50,8 @@ import { HealthModule } from './modules/health/health.module';
     TasksModule,
     ConnectionsModule,
     DashboardModule,
+    GoogleModule,
+    ChatModule,
     HealthModule,
   ],
 })

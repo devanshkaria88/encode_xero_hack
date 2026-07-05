@@ -8,6 +8,8 @@ import { Detection } from './detection.entity';
 import { Task } from './task.entity';
 import { AuditEvent } from './audit-event.entity';
 import { ConnectionState } from './connection-state.entity';
+import { GoogleConnection } from './google-connection.entity';
+import { AgentSettings } from './agent-settings.entity';
 
 export * from './enums';
 export * from './shapes';
@@ -21,6 +23,14 @@ export { Detection } from './detection.entity';
 export { Task } from './task.entity';
 export { AuditEvent } from './audit-event.entity';
 export { ConnectionState } from './connection-state.entity';
+export { GoogleConnection, GoogleSyncStatus } from './google-connection.entity';
+export {
+  AgentSettings,
+  CHAT_MODEL_OPTIONS,
+  DEFAULT_CHAT_MODEL,
+  DEFAULT_SYSTEM_PROMPT,
+} from './agent-settings.entity';
+export type { AgentMcpServer, AgentSkill } from './agent-settings.entity';
 
 // The full entity set — imported by TypeOrmModule.forRoot and test harnesses.
 export const ALL_ENTITIES = [
@@ -34,4 +44,6 @@ export const ALL_ENTITIES = [
   Task,
   AuditEvent,
   ConnectionState,
+  GoogleConnection,
+  AgentSettings,
 ];

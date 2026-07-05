@@ -25,6 +25,7 @@
     "@nestjs/typeorm": "^10.0.2",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.1",
+    "googleapis": "^173.0.0",
     "imapflow": "^1.0.191",
     "mailparser": "^3.7.2",
     "node-ical": "^0.20.1",

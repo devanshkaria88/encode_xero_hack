@@ -1190,6 +1190,29 @@
         ]
       }
     },
+    "/dashboard/charts": {
+      "get": {
+        "description": "Everything the chart board needs in one call: invoices owed buckets (draft, awaiting payment, overdue) from live Xero sales invoices, cash received per month for the last 6 months, money Robyn found by detection state, and the unbilled pipeline. Cached for 60 seconds to respect the Xero rate budget. If Xero is unreachable the invoice and cash figures are approximated from local proposals and meta.source reads \"local-fallback\" — this endpoint never fails because Xero is down.",
+        "operationId": "DashboardController_charts",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardChartsDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Chart board data",
+        "tags": [
+          "dashboard"
+        ]
+      }
+    },
     "/dashboard/summary": {
       "get": {
         "description": "Open tasks, total unbilled £ across clients, invoices sent this month, and client count.",
@@ -1210,6 +1233,304 @@
         "summary": "Headline stats",
         "tags": [
           "dashboard"
+        ]
+      }
+    },
+    "/google/auth-url": {
+      "get": {
+        "description": "Returns the consent screen URL (calendar.readonly + gmail.readonly + userinfo.email, offline access, forced consent). The state nonce is held server-side and checked on the callback.",
+        "operationId": "GoogleController_authUrl",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GoogleAuthUrlDto"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET not configured."
+          }
+        },
+        "summary": "Start the Google OAuth flow",
+        "tags": [
+          "google"
+        ]
+      }
+    },
+    "/google/callback": {
+      "get": {
+        "description": "Exchanges the single-use code, stores tokens + granted scopes + account email, then immediately triggers the first sync in the background. Idempotent: re-hitting with a used code or unknown state while a connection exists returns success. Unguarded by design — Google redirects the browser here with no bearer token.",
+        "operationId": "GoogleController_callback",
+        "parameters": [
+          {
+            "name": "code",
+            "required": false,
+            "in": "query",
+            "description": "Single-use authorization code from Google.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "state",
+            "required": false,
+            "in": "query",
+            "description": "State nonce issued by GET /google/auth-url.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "error",
+            "required": false,
+            "in": "query",
+            "description": "Error code when the user cancelled the consent screen.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GoogleCallbackResultDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Consent cancelled or code exchange failed with no existing connection."
+          }
+        },
+        "summary": "OAuth callback (code exchange)",
+        "tags": [
+          "google"
+        ]
+      }
+    },
+    "/google/status": {
+      "get": {
+        "description": "Connection, account email, granted scopes and per-scope grants (calendar/gmail), last sync time and sync status. Safe to poll while the post-connect sync runs.",
+        "operationId": "GoogleController_status",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GoogleStatusDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Google connection status",
+        "tags": [
+          "google"
+        ]
+      }
+    },
+    "/google/sync": {
+      "post": {
+        "description": "Runs the calendar sync (events feed the existing meetings pipeline) and the Gmail poll (queued potential-client senders only) for whichever scopes were granted, and returns counts.",
+        "operationId": "GoogleController_sync",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GoogleSyncResultDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No Google connection."
+          }
+        },
+        "summary": "Sync Google now",
+        "tags": [
+          "google"
+        ]
+      }
+    },
+    "/google/connection": {
+      "delete": {
+        "description": "Best-effort token revoke, deletes the stored connection and reverts the CALENDAR/EMAIL connection rows to their honest fixture fallbacks. Idempotent.",
+        "operationId": "GoogleController_disconnect",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GoogleDisconnectResultDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Disconnect Google",
+        "tags": [
+          "google"
+        ]
+      }
+    },
+    "/agent-settings": {
+      "get": {
+        "description": "The chat agent configuration: system prompt, model, web search toggle, skills and MCP servers. Seeded with defaults on first read. MCP auth tokens are masked to the boolean authConfigured — secrets are never returned.",
+        "operationId": "AgentSettingsController_get",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentSettingsDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Get agent settings",
+        "tags": [
+          "chat"
+        ]
+      },
+      "patch": {
+        "description": "Partial update. skills and mcpServers are replaced wholesale when provided; an MCP server that keeps its id keeps its stored token unless a new one (or null, to clear) is sent. Every change writes an AuditEvent naming the changed fields.",
+        "operationId": "AgentSettingsController_update",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateAgentSettingsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentSettingsDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Update agent settings",
+        "tags": [
+          "chat"
+        ]
+      }
+    },
+    "/agent-settings/mcp/test": {
+      "post": {
+        "description": "Attempts an MCP streamable-HTTP handshake (JSON-RPC initialize, then tools/list) against the given URL with a 5s budget. Nothing is persisted; the token is never logged or echoed. Returns the discovered tools on success.",
+        "operationId": "AgentSettingsController_testMcp",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/McpTestRequestDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/McpTestResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Test an MCP server connection",
+        "tags": [
+          "chat"
+        ]
+      }
+    },
+    "/chat": {
+      "post": {
+        "description": "Streams the agent's reply as Server-Sent Events. Each event is a JSON object on a `data:` line: {type:'text',delta}, {type:'tool',name,status:'running'|'done'|'error'}, {type:'error',message}, and a final {type:'done'}. The server is stateless — send the full history each time. The agent is strictly read-only: it consults live data but never writes to Xero or resolves tasks.",
+        "operationId": "ChatController_chatStream",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatRequestDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "text/event-stream of ChatSseEventDto-shaped JSON events (not a single JSON body).",
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatSseEventDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed chat history."
+          }
+        },
+        "summary": "Chat with Robyn (SSE stream)",
+        "tags": [
+          "chat"
+        ]
+      }
+    },
+    "/chat/starters": {
+      "get": {
+        "description": "Four canned questions computed cheaply from live data (leak totals, open task count) for the empty chat state.",
+        "operationId": "ChatController_starters",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatStartersDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Suggested chat questions",
+        "tags": [
+          "chat"
         ]
       }
     }
@@ -1244,6 +1565,14 @@
     {
       "name": "connections",
       "description": "Integration health + check-now"
+    },
+    {
+      "name": "google",
+      "description": "Google OAuth + calendar/gmail sync"
+    },
+    {
+      "name": "chat",
+      "description": "Agentic chat + agent settings"
     },
     {
       "name": "dashboard",
@@ -3695,6 +4024,198 @@
           "breakdown"
         ]
       },
+      "InvoicesOwedBucketDto": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string",
+            "description": "Bucket key. DRAFT = draft+submitted invoices, AWAITING = authorised and not yet due (or no due date), OVERDUE = authorised and past due.",
+            "enum": [
+              "DRAFT",
+              "AWAITING",
+              "OVERDUE"
+            ]
+          },
+          "count": {
+            "type": "number",
+            "description": "Number of invoices in this bucket.",
+            "example": 3
+          },
+          "amountGbp": {
+            "type": "number",
+            "description": "Amount still owed in this bucket (GBP, 2dp) — sum of AmountDue.",
+            "example": 1440
+          }
+        },
+        "required": [
+          "key",
+          "count",
+          "amountGbp"
+        ]
+      },
+      "CashInMonthDto": {
+        "type": "object",
+        "properties": {
+          "month": {
+            "type": "string",
+            "description": "Calendar month key.",
+            "example": "2026-02"
+          },
+          "amountGbp": {
+            "type": "number",
+            "description": "Payments received against sales invoices that month (GBP, 2dp).",
+            "example": 960
+          }
+        },
+        "required": [
+          "month",
+          "amountGbp"
+        ]
+      },
+      "CashInDto": {
+        "type": "object",
+        "properties": {
+          "months": {
+            "description": "Last 6 calendar months (oldest first, current month included), zero-filled so every month has a bar.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CashInMonthDto"
+            }
+          },
+          "total6m": {
+            "type": "number",
+            "description": "Total received across the 6 months (GBP, 2dp).",
+            "example": 5760
+          }
+        },
+        "required": [
+          "months",
+          "total6m"
+        ]
+      },
+      "MoneyFoundBucketDto": {
+        "type": "object",
+        "properties": {
+          "state": {
+            "type": "string",
+            "description": "Detection lifecycle state this bucket counts.",
+            "enum": [
+              "OPEN",
+              "PROPOSED",
+              "RESOLVED",
+              "DISMISSED"
+            ]
+          },
+          "count": {
+            "type": "number",
+            "description": "Number of detections in this state.",
+            "example": 2
+          },
+          "amountGbp": {
+            "type": "number",
+            "description": "Total value Robyn found in this state (GBP, 2dp).",
+            "example": 2880
+          }
+        },
+        "required": [
+          "state",
+          "count",
+          "amountGbp"
+        ]
+      },
+      "UnbilledPipelineDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "description": "Per-source unbilled pipeline (same computation as the leak strip): open detections, invoices in review, unbilled meetings.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LeakBreakdownDto"
+            }
+          },
+          "totalGbp": {
+            "type": "number",
+            "description": "Total unbilled pipeline (GBP, 2dp) — sums the items.",
+            "example": 3555
+          }
+        },
+        "required": [
+          "items",
+          "totalGbp"
+        ]
+      },
+      "ChartsMetaDto": {
+        "type": "object",
+        "properties": {
+          "source": {
+            "type": "string",
+            "description": "Where the invoice/cash figures came from: \"xero-live\" for live Xero reads, \"local-fallback\" for the local proposal approximation when Xero is unreachable.",
+            "enum": [
+              "xero-live",
+              "local-fallback"
+            ]
+          },
+          "generatedAt": {
+            "type": "string",
+            "description": "When this payload was computed (ISO datetime). Cached for up to 60 seconds.",
+            "example": "2026-07-04T12:00:00.000Z"
+          }
+        },
+        "required": [
+          "source",
+          "generatedAt"
+        ]
+      },
+      "DashboardChartsDto": {
+        "type": "object",
+        "properties": {
+          "invoicesOwed": {
+            "description": "Invoices owed buckets from live Xero ACCREC invoices (or local proposals on fallback). Always all three keys in DRAFT, AWAITING, OVERDUE order.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InvoicesOwedBucketDto"
+            }
+          },
+          "cashIn": {
+            "description": "Cash received per month over the last 6 calendar months.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/CashInDto"
+              }
+            ]
+          },
+          "moneyFound": {
+            "description": "Money Robyn found, bucketed by detection state (all states present: OPEN, PROPOSED, RESOLVED, DISMISSED) so recovered vs pending vs dismissed can be shown.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MoneyFoundBucketDto"
+            }
+          },
+          "unbilledPipeline": {
+            "description": "The unbilled pipeline — the leak-strip breakdown reshaped for charting.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/UnbilledPipelineDto"
+              }
+            ]
+          },
+          "meta": {
+            "description": "Data provenance and freshness.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ChartsMetaDto"
+              }
+            ]
+          }
+        },
+        "required": [
+          "invoicesOwed",
+          "cashIn",
+          "moneyFound",
+          "unbilledPipeline",
+          "meta"
+        ]
+      },
       "DashboardSummaryDto": {
         "type": "object",
         "properties": {
@@ -3724,6 +4245,577 @@
           "unbilledGbp",
           "invoicesSentThisMonth",
           "clientsCount"
+        ]
+      },
+      "GoogleAuthUrlDto": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "description": "Google consent screen URL. Open it in the browser; Google redirects back to the registered callback."
+          }
+        },
+        "required": [
+          "url"
+        ]
+      },
+      "GoogleCallbackResultDto": {
+        "type": "object",
+        "properties": {
+          "connected": {
+            "type": "boolean",
+            "description": "True once a Google connection is stored."
+          },
+          "accountEmail": {
+            "type": "object",
+            "nullable": true,
+            "example": "devansh88karia@gmail.com"
+          },
+          "grantedScopes": {
+            "description": "The scopes the user actually granted (they can untick any on the consent screen).",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "connected",
+          "grantedScopes"
+        ]
+      },
+      "GoogleSyncStatus": {
+        "type": "string",
+        "enum": [
+          "PENDING",
+          "SYNCING",
+          "OK",
+          "ERROR"
+        ]
+      },
+      "GoogleScopeGrantDto": {
+        "type": "object",
+        "properties": {
+          "granted": {
+            "type": "boolean",
+            "description": "Whether this scope was granted on the consent screen."
+          }
+        },
+        "required": [
+          "granted"
+        ]
+      },
+      "GoogleStatusDto": {
+        "type": "object",
+        "properties": {
+          "connected": {
+            "type": "boolean"
+          },
+          "accountEmail": {
+            "type": "object",
+            "nullable": true
+          },
+          "grantedScopes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "lastSyncAt": {
+            "type": "object",
+            "nullable": true,
+            "description": "ISO timestamp of the last finished sync."
+          },
+          "syncStatus": {
+            "nullable": true,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/GoogleSyncStatus"
+              }
+            ]
+          },
+          "syncError": {
+            "type": "object",
+            "nullable": true,
+            "description": "Why the last sync failed, if it did."
+          },
+          "calendar": {
+            "$ref": "#/components/schemas/GoogleScopeGrantDto"
+          },
+          "gmail": {
+            "$ref": "#/components/schemas/GoogleScopeGrantDto"
+          }
+        },
+        "required": [
+          "connected",
+          "grantedScopes",
+          "calendar",
+          "gmail"
+        ]
+      },
+      "GoogleCalendarSyncDto": {
+        "type": "object",
+        "properties": {
+          "synced": {
+            "type": "boolean",
+            "description": "True when events came from Google this run (not a fallback)."
+          },
+          "imported": {
+            "type": "number",
+            "description": "New meetings created."
+          },
+          "updated": {
+            "type": "number",
+            "description": "Existing meetings refreshed."
+          },
+          "processed": {
+            "type": "number",
+            "description": "Meetings the Loop-1 step ran on."
+          }
+        },
+        "required": [
+          "synced",
+          "imported",
+          "updated",
+          "processed"
+        ]
+      },
+      "GoogleGmailSyncDto": {
+        "type": "object",
+        "properties": {
+          "synced": {
+            "type": "boolean",
+            "description": "True when the Gmail INBOX was polled this run (scope granted)."
+          },
+          "messagesRead": {
+            "type": "number",
+            "description": "Messages read — queued potential-client senders only."
+          },
+          "agreementsDetected": {
+            "type": "number",
+            "description": "Potential clients moved to AGREEMENT_DETECTED."
+          },
+          "tasksRaised": {
+            "type": "number",
+            "description": "New CONFIRM_AGREEMENT tasks raised."
+          }
+        },
+        "required": [
+          "synced",
+          "messagesRead",
+          "agreementsDetected",
+          "tasksRaised"
+        ]
+      },
+      "GoogleSyncResultDto": {
+        "type": "object",
+        "properties": {
+          "calendar": {
+            "$ref": "#/components/schemas/GoogleCalendarSyncDto"
+          },
+          "gmail": {
+            "$ref": "#/components/schemas/GoogleGmailSyncDto"
+          },
+          "syncStatus": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/GoogleSyncStatus"
+              }
+            ]
+          },
+          "syncError": {
+            "type": "object",
+            "nullable": true
+          },
+          "lastSyncAt": {
+            "type": "string",
+            "description": "ISO timestamp of this sync."
+          }
+        },
+        "required": [
+          "calendar",
+          "gmail",
+          "syncStatus",
+          "lastSyncAt"
+        ]
+      },
+      "GoogleDisconnectResultDto": {
+        "type": "object",
+        "properties": {
+          "disconnected": {
+            "type": "boolean",
+            "description": "The connection row is gone (idempotent — true even if none existed)."
+          },
+          "revoked": {
+            "type": "boolean",
+            "description": "Whether the best-effort Google token revoke succeeded."
+          }
+        },
+        "required": [
+          "disconnected",
+          "revoked"
+        ]
+      },
+      "McpServerDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Stable server id (assigned on create)."
+          },
+          "name": {
+            "type": "string",
+            "description": "Display name; also used as the MCP server name on the Anthropic API."
+          },
+          "url": {
+            "type": "string",
+            "description": "Streamable-HTTP MCP endpoint URL."
+          },
+          "authConfigured": {
+            "type": "boolean",
+            "description": "True when a bearer token is stored for this server. The token itself is never returned."
+          },
+          "enabled": {
+            "type": "boolean",
+            "description": "Whether the chat agent may use this server."
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "url",
+          "authConfigured",
+          "enabled"
+        ]
+      },
+      "SkillDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Stable skill id (assigned on create)."
+          },
+          "name": {
+            "type": "string",
+            "description": "Skill name, shown as a named section header in the system prompt."
+          },
+          "instructions": {
+            "type": "string",
+            "description": "Instruction text appended to the system prompt when enabled."
+          },
+          "enabled": {
+            "type": "boolean",
+            "description": "Whether this skill is appended to the system prompt."
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "instructions",
+          "enabled"
+        ]
+      },
+      "AgentSettingsDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Settings row id.",
+            "format": "uuid"
+          },
+          "systemPrompt": {
+            "type": "string",
+            "description": "The editable system prompt for Robyn chat."
+          },
+          "model": {
+            "type": "string",
+            "description": "Anthropic model used for chat.",
+            "enum": [
+              "claude-sonnet-5",
+              "claude-opus-4-8",
+              "claude-haiku-4-5"
+            ],
+            "example": "claude-sonnet-5"
+          },
+          "webSearchEnabled": {
+            "type": "boolean",
+            "description": "Whether Anthropic's server-side web search tool is enabled."
+          },
+          "mcpServers": {
+            "description": "User-added MCP servers (tokens masked).",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/McpServerDto"
+            }
+          },
+          "skills": {
+            "description": "Named instruction snippets for the system prompt.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SkillDto"
+            }
+          },
+          "updatedAt": {
+            "type": "string",
+            "description": "Last update time (ISO datetime)."
+          }
+        },
+        "required": [
+          "id",
+          "systemPrompt",
+          "model",
+          "webSearchEnabled",
+          "mcpServers",
+          "skills",
+          "updatedAt"
+        ]
+      },
+      "McpServerInputDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Existing server id. Include it to update in place and keep the stored token."
+          },
+          "name": {
+            "type": "string",
+            "description": "Display name.",
+            "maxLength": 80
+          },
+          "url": {
+            "type": "string",
+            "description": "Streamable-HTTP MCP endpoint URL (http/https)."
+          },
+          "authToken": {
+            "type": "object",
+            "description": "Bearer token for the server. Omit or send \"\" to keep the stored token; send null to clear it. Never returned in responses.",
+            "nullable": true
+          },
+          "enabled": {
+            "type": "boolean",
+            "description": "Whether the chat agent may use this server."
+          }
+        },
+        "required": [
+          "name",
+          "url",
+          "enabled"
+        ]
+      },
+      "SkillInputDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Existing skill id. Include it to update in place."
+          },
+          "name": {
+            "type": "string",
+            "description": "Skill name.",
+            "maxLength": 80
+          },
+          "instructions": {
+            "type": "string",
+            "description": "Instruction text appended to the system prompt when enabled.",
+            "maxLength": 8000
+          },
+          "enabled": {
+            "type": "boolean",
+            "description": "Whether this skill is active."
+          }
+        },
+        "required": [
+          "name",
+          "instructions",
+          "enabled"
+        ]
+      },
+      "UpdateAgentSettingsDto": {
+        "type": "object",
+        "properties": {
+          "systemPrompt": {
+            "type": "string",
+            "description": "Replacement system prompt.",
+            "maxLength": 20000
+          },
+          "model": {
+            "type": "string",
+            "description": "Anthropic model for chat.",
+            "enum": [
+              "claude-sonnet-5",
+              "claude-opus-4-8",
+              "claude-haiku-4-5"
+            ]
+          },
+          "webSearchEnabled": {
+            "type": "boolean",
+            "description": "Toggle the server-side web search tool."
+          },
+          "mcpServers": {
+            "description": "Full replacement list of MCP servers. Servers that keep their id keep their stored token unless a new one is provided.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/McpServerInputDto"
+            }
+          },
+          "skills": {
+            "description": "Full replacement list of skills.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SkillInputDto"
+            }
+          }
+        }
+      },
+      "McpTestRequestDto": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "description": "Streamable-HTTP MCP endpoint URL to probe (nothing is persisted)."
+          },
+          "authToken": {
+            "type": "string",
+            "description": "Bearer token to probe with. Never persisted or logged."
+          }
+        },
+        "required": [
+          "url"
+        ]
+      },
+      "McpTestToolDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Tool name reported by the server."
+          },
+          "description": {
+            "type": "string",
+            "description": "Tool description reported by the server.",
+            "nullable": true
+          }
+        },
+        "required": [
+          "name",
+          "description"
+        ]
+      },
+      "McpTestResponseDto": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "description": "True when initialize + tools/list both succeeded."
+          },
+          "tools": {
+            "description": "Tools discovered on the server (empty on failure).",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/McpTestToolDto"
+            }
+          },
+          "error": {
+            "type": "string",
+            "description": "Human-readable failure reason, or null on success.",
+            "nullable": true
+          }
+        },
+        "required": [
+          "ok",
+          "tools",
+          "error"
+        ]
+      },
+      "ChatMessageDto": {
+        "type": "object",
+        "properties": {
+          "role": {
+            "type": "string",
+            "description": "Who said it.",
+            "enum": [
+              "user",
+              "assistant"
+            ]
+          },
+          "content": {
+            "type": "string",
+            "description": "Plain-text message content.",
+            "maxLength": 24000
+          }
+        },
+        "required": [
+          "role",
+          "content"
+        ]
+      },
+      "ChatRequestDto": {
+        "type": "object",
+        "properties": {
+          "messages": {
+            "description": "Full conversation history, oldest first, ending with the latest user message. The server is stateless — the client keeps history.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ChatMessageDto"
+            }
+          }
+        },
+        "required": [
+          "messages"
+        ]
+      },
+      "ChatSseEventDto": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "description": "Event discriminator. 'text' carries a delta; 'tool' carries name+status ('running'|'done'|'error'); 'error' carries message; 'done' ends the stream.",
+            "enum": [
+              "text",
+              "tool",
+              "done",
+              "error"
+            ]
+          },
+          "delta": {
+            "type": "string",
+            "description": "Text delta (type='text')."
+          },
+          "name": {
+            "type": "string",
+            "description": "Tool name (type='tool')."
+          },
+          "status": {
+            "type": "string",
+            "description": "Tool status (type='tool').",
+            "enum": [
+              "running",
+              "done",
+              "error"
+            ]
+          },
+          "message": {
+            "type": "string",
+            "description": "Error message (type='error')."
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "ChatStartersDto": {
+        "type": "object",
+        "properties": {
+          "starters": {
+            "description": "Four suggested questions computed from live data, for the empty chat state.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "starters"
         ]
       }
     }
