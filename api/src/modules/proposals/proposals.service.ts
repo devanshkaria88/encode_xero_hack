@@ -402,6 +402,7 @@ export class ProposalsService {
       xeroInvoiceNumber: p.xeroInvoiceNumber ?? null,
       xeroDeepLink: p.xeroDeepLink ?? null,
       xeroError: null,
+      emailedAt: p.emailedAt ? new Date(p.emailedAt).toISOString() : null,
       subtotal: Number(p.subtotal),
       taxTotal: Number(p.taxTotal),
       total: Number(p.total),
@@ -472,6 +473,7 @@ export class ProposalsService {
       xeroInvoiceNumber: p.xeroInvoiceNumber ?? null,
       xeroDeepLink: p.xeroDeepLink ?? null,
       xeroError: null,
+      emailedAt: p.emailedAt ? new Date(p.emailedAt).toISOString() : null,
       subtotal,
       taxTotal,
       total,
@@ -500,6 +502,7 @@ export class ProposalsService {
       },
       lineCount: (p.lines ?? []).length,
       autoSent: p.autoSent,
+      emailedAt: p.emailedAt ? new Date(p.emailedAt).toISOString() : null,
       reference: p.reference,
       xeroInvoiceId: p.xeroInvoiceId,
       xeroInvoiceNumber: p.xeroInvoiceNumber,
@@ -645,4 +648,11 @@ export class ProposalsService {
 function errMsg(err: unknown): string {
   if (err instanceof Error) return err.message;
   return String(err);
+}
+
+/** YYYY-MM-DD (UTC) a number of days from today — contract payment terms. */
+function isoDateInDays(days: number): string {
+  const d = new Date();
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
 }

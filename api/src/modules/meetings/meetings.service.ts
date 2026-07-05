@@ -51,13 +51,18 @@ import {
 
 // Robyn's own address(es). External attendees are everyone else — a block with
 // only owner attendees reads as PERSONAL and is auto-skipped.
-const OWNER_EMAILS: string[] = [
-  'me@robyn.dev',
-  ...(process.env.OWNER_EMAILS ?? '')
-    .split(',')
-    .map((s) => s.trim())
-    .filter(Boolean),
-];
+// Lazy: ConfigModule loads .env into process.env at bootstrap, AFTER this
+// module is imported — a module-level const would capture an empty env and
+// silently queue the owner as a potential client of themselves.
+function ownerEmails(): string[] {
+  return [
+    'me@robyn.dev',
+    ...(process.env.OWNER_EMAILS ?? '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean),
+  ];
+}
 
 const TAX_RATE_PCT = 20; // UK VAT
 
@@ -123,7 +128,7 @@ export class MeetingsService {
 
     // 1-2. Deterministic classification. LLM fuzzy proposals ONLY for the human
     // (unknown/ambiguous). The LLM never sets clientId.
-    const match = this.engine.classify(meeting.attendees ?? [], engineClients, OWNER_EMAILS);
+    const match = this.engine.classify(meeting.attendees ?? [], engineClients, ownerEmails());
     if (match.kind === 'UNKNOWN' || match.kind === 'AMBIGUOUS') {
       try {
         const res = await this.llm.proposeClientMatches(
@@ -768,7 +773,7 @@ export class MeetingsService {
   }
 
   private isPersonalMeeting(attendees: MeetingAttendee[]): boolean {
-    const owner = new Set(OWNER_EMAILS.map((e) => e.toLowerCase()));
+    const owner = new Set(ownerEmails().map((e) => e.toLowerCase()));
     const external = attendees.filter((a) => a.email && !owner.has(a.email.toLowerCase()));
     return external.length === 0;
   }

@@ -55,6 +55,12 @@ export class ProposalSummaryDto {
   @ApiProperty({ description: 'Whether Robyn auto-sent this (autonomy ON)' })
   autoSent!: boolean;
 
+  @ApiPropertyOptional({
+    nullable: true,
+    description: 'ISO timestamp when Xero emailed the invoice to the client; null if not emailed',
+  })
+  emailedAt!: string | null;
+
   @ApiPropertyOptional({ nullable: true, description: 'Idempotency reference used in Xero' })
   reference!: string | null;
 
@@ -185,6 +191,12 @@ export class ProposalActionResultDto {
 
   @ApiPropertyOptional({ nullable: true, description: 'Xero error message when the write failed' })
   xeroError!: string | null;
+
+  @ApiPropertyOptional({
+    nullable: true,
+    description: 'ISO timestamp when Xero emailed the invoice to the client; null if not emailed',
+  })
+  emailedAt!: string | null;
 
   @ApiProperty({ example: 225 })
   subtotal!: number;

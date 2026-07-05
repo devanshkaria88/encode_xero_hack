@@ -1798,6 +1798,64 @@
           "text"
         ]
       },
+      "ContractBillingRulesDto": {
+        "type": "object",
+        "properties": {
+          "baseRateGbp": {
+            "type": "number",
+            "example": 50,
+            "description": "Standard hourly rate in GBP."
+          },
+          "reducedRateGbp": {
+            "type": "number",
+            "nullable": true,
+            "example": 40,
+            "description": "Reduced hourly rate applied to the whole week once weekly hours pass the threshold."
+          },
+          "reducedRateThresholdHoursPerWeek": {
+            "type": "number",
+            "nullable": true,
+            "example": 3,
+            "description": "Weekly hours above which the reduced rate applies to every hour that week."
+          },
+          "minBlockMinutes": {
+            "type": "number",
+            "nullable": true,
+            "example": 30,
+            "description": "Minimum billing block in minutes. Any session bills at least one block."
+          },
+          "roundUpToBlockMinutes": {
+            "type": "number",
+            "nullable": true,
+            "example": 30,
+            "description": "Time beyond the first block rounds up to the nearest block of this many minutes."
+          },
+          "billingCycle": {
+            "type": "string",
+            "nullable": true,
+            "enum": [
+              "weekly",
+              "monthly"
+            ],
+            "example": "weekly"
+          },
+          "paymentTermsDays": {
+            "type": "number",
+            "nullable": true,
+            "example": 7,
+            "description": "Days until payment is due."
+          }
+        },
+        "required": [
+          "baseRateGbp",
+          "reducedRateGbp",
+          "reducedRateThresholdHoursPerWeek",
+          "minBlockMinutes",
+          "roundUpToBlockMinutes",
+          "billingCycle",
+          "paymentTermsDays"
+        ]
+      },
       "ContractDto": {
         "type": "object",
         "properties": {
@@ -1860,6 +1918,15 @@
               "$ref": "#/components/schemas/ClauseDto"
             }
           },
+          "billingRules": {
+            "nullable": true,
+            "description": "Structured billing rules (tiers, minimum blocks), when the contract states them.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ContractBillingRulesDto"
+              }
+            ]
+          },
           "createdAt": {
             "type": "string",
             "format": "date-time"
@@ -1881,6 +1948,7 @@
           "paymentTerms",
           "scopeSummary",
           "clauses",
+          "billingRules",
           "createdAt",
           "updatedAt"
         ]
@@ -2561,6 +2629,11 @@
             "type": "boolean",
             "description": "True if Robyn auto-sent it (autonomy ON)."
           },
+          "emailedAt": {
+            "type": "object",
+            "nullable": true,
+            "description": "ISO timestamp when Xero emailed the invoice to the client; null if not emailed."
+          },
           "xeroInvoiceId": {
             "type": "object",
             "nullable": true
@@ -3078,6 +3151,11 @@
             "type": "boolean",
             "description": "Whether Robyn auto-sent this (autonomy ON)"
           },
+          "emailedAt": {
+            "type": "object",
+            "nullable": true,
+            "description": "ISO timestamp when Xero emailed the invoice to the client; null if not emailed"
+          },
           "reference": {
             "type": "object",
             "nullable": true,
@@ -3335,6 +3413,11 @@
             "type": "boolean",
             "description": "Whether Robyn auto-sent this (autonomy ON)"
           },
+          "emailedAt": {
+            "type": "object",
+            "nullable": true,
+            "description": "ISO timestamp when Xero emailed the invoice to the client; null if not emailed"
+          },
           "reference": {
             "type": "object",
             "nullable": true,
@@ -3431,6 +3514,11 @@
             "type": "object",
             "nullable": true,
             "description": "Xero error message when the write failed"
+          },
+          "emailedAt": {
+            "type": "object",
+            "nullable": true,
+            "description": "ISO timestamp when Xero emailed the invoice to the client; null if not emailed"
           },
           "subtotal": {
             "type": "number",

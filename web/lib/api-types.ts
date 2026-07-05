@@ -991,6 +991,43 @@ export interface components {
             /** @example The Consultant shall be paid at a rate of GBP 150 per hour. */
             text: string;
         };
+        ContractBillingRulesDto: {
+            /**
+             * @description Standard hourly rate in GBP.
+             * @example 50
+             */
+            baseRateGbp: number;
+            /**
+             * @description Reduced hourly rate applied to the whole week once weekly hours pass the threshold.
+             * @example 40
+             */
+            reducedRateGbp: number | null;
+            /**
+             * @description Weekly hours above which the reduced rate applies to every hour that week.
+             * @example 3
+             */
+            reducedRateThresholdHoursPerWeek: number | null;
+            /**
+             * @description Minimum billing block in minutes. Any session bills at least one block.
+             * @example 30
+             */
+            minBlockMinutes: number | null;
+            /**
+             * @description Time beyond the first block rounds up to the nearest block of this many minutes.
+             * @example 30
+             */
+            roundUpToBlockMinutes: number | null;
+            /**
+             * @example weekly
+             * @enum {string|null}
+             */
+            billingCycle: "weekly" | "monthly" | null;
+            /**
+             * @description Days until payment is due.
+             * @example 7
+             */
+            paymentTermsDays: number | null;
+        };
         ContractDto: {
             /** Format: uuid */
             id: string;
@@ -1020,6 +1057,8 @@ export interface components {
             scopeSummary: string | null;
             /** @description Every parsed clause, each keeping its citation. */
             clauses: components["schemas"]["ClauseDto"][];
+            /** @description Structured billing rules (tiers, minimum blocks), when the contract states them. */
+            billingRules: components["schemas"]["ContractBillingRulesDto"] | null;
             /** Format: date-time */
             createdAt: string;
             /** Format: date-time */
@@ -1288,6 +1327,8 @@ export interface components {
             total: number;
             /** @description True if Robyn auto-sent it (autonomy ON). */
             autoSent: boolean;
+            /** @description ISO timestamp when Xero emailed the invoice to the client; null if not emailed. */
+            emailedAt?: Record<string, never> | null;
             xeroInvoiceId?: Record<string, never> | null;
             xeroInvoiceNumber?: Record<string, never> | null;
             xeroDeepLink?: Record<string, never> | null;
@@ -1471,6 +1512,8 @@ export interface components {
             lineCount: number;
             /** @description Whether Robyn auto-sent this (autonomy ON) */
             autoSent: boolean;
+            /** @description ISO timestamp when Xero emailed the invoice to the client; null if not emailed */
+            emailedAt?: Record<string, never> | null;
             /** @description Idempotency reference used in Xero */
             reference?: Record<string, never> | null;
             xeroInvoiceId?: Record<string, never> | null;
@@ -1548,6 +1591,8 @@ export interface components {
             lineCount: number;
             /** @description Whether Robyn auto-sent this (autonomy ON) */
             autoSent: boolean;
+            /** @description ISO timestamp when Xero emailed the invoice to the client; null if not emailed */
+            emailedAt?: Record<string, never> | null;
             /** @description Idempotency reference used in Xero */
             reference?: Record<string, never> | null;
             xeroInvoiceId?: Record<string, never> | null;
@@ -1574,6 +1619,8 @@ export interface components {
             xeroDeepLink?: Record<string, never> | null;
             /** @description Xero error message when the write failed */
             xeroError?: Record<string, never> | null;
+            /** @description ISO timestamp when Xero emailed the invoice to the client; null if not emailed */
+            emailedAt?: Record<string, never> | null;
             /** @example 225 */
             subtotal: number;
             /** @example 45 */
